@@ -59,6 +59,8 @@
 - **sub-travel**：旅行・観光・宿泊
 - **sub-gov**：官公庁・団体・特殊会社
 - **sub-creative**：企画・制作・広告・デザイン
+- **sub-construction**：土木・建設・建築・設計事務所
+- **sub-music**：音楽（レーベル・アーティスト・ライブ・音楽教室）
 
 ## Constraints
 
