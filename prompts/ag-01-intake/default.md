@@ -110,6 +110,6 @@
       "label": "コーポレートサイト専門",
       "rationale": "コーポレートサイトも含む場合に追加を推奨"
     },
-    "otherAgents": ["AG-03", "AG-04", "AG-05", "AG-06"]
+    "otherAgents": ["AG-03", "AG-04", "AG-05", "AG-06", "AG-07-STORY"]
   }
 }
