@@ -153,7 +153,13 @@
       "priority": "high|medium|low"
     }
   ],
-  "confidence": "medium",
+  "targetHypothesis": {
+    "primaryTarget": "このクライアントが最も接点を持てる蓋然性が高い人物像（職種・状況・心理状態・行動段階）",
+    "whyThisTarget": "なぜその層か。市場構造・競合状況・クライアントの強みから導く根拠",
+    "contextualState": "その人が今どういう状態にいるか。情報収集の段階・意思決定の文脈・感情的な状況",
+    "basisFromMarket": "この仮説を支える市場分析上の根拠"
+  },
+    "confidence": "medium",
   "factBasis": ["根拠となる情報・調査・出典（時期も明示）"],
   "assumptions": ["推測・仮説として扱った情報"]
 }

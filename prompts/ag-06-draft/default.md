@@ -124,6 +124,7 @@ AG-04の `coreProblemStatements` をもとに提案軸を2〜3案立案する。
 - 制作コストの現実を意識する（理想だけでなく実現可能な提案をする）
 - AG-05でcritical指摘された問題に対応した設計になっているかを確認する
 - 提案軸は「〜を大切にします」等の抽象論ではなく「〜という体験を設計する」レベルまで具体化する
+- IA・導線設計は必ずAG-04の`targetDefinition`と`contextualState`を根拠とする。「誰の・どういう状態のための導線か」を設計の起点にする
 
 ## Output Format
 
@@ -143,7 +144,7 @@ AG-04の `coreProblemStatements` をもとに提案軸を2〜3案立案する。
   ],
   "recommendationRationale": "推奨軸を選んだ理由（他の軸との比較）",
   "siteStructure": {
-    "primaryTarget": "最優先ターゲット（職種・年代・状況）",
+    "primaryTarget": "最優先ターゲット。AG-04のtargetDefinitionを引き継ぎ・職種・状況・contextualStateを含む",
     "secondaryTargets": ["サブターゲット（複数の場合）"],
     "globalNavigation": ["グローバルナビゲーションの項目（順番に意味あり）"],
     "siteMap": [

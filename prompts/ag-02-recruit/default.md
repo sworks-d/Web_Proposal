@@ -151,6 +151,12 @@
     ],
     "negativeDisclosureStrategy": "ネガティブ情報の開示戦略（何を・どこで・どう開示するか）"
   },
+    "targetHypothesis": {
+    "primaryTarget": "このクライアントが最も接点を持てる蓋然性が高い人物像（職種・年代・転職状況・心理状態）",
+    "whyThisTarget": "なぜその層か。市場構造・競合状況・クライアントの強みから導く根拠",
+    "contextualState": "その人が今どういう状態にいるか。情報収集の段階・意思決定の文脈・感情的な状況",
+    "basisFromMarket": "この仮説を支える市場分析上の根拠（AG-02の分析から）"
+  },
   "siteDesignPrinciples": [
     {
       "principle": "〜すべきである（具体的なサイト設計・コンテンツ・導線・CV設計の判断）",
