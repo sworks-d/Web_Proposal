@@ -1098,7 +1098,128 @@ npm run dev
 
 ---
 
-## 12. Phase 3 で追加する内容（参考）
+## 12. フォント設定
+
+### 12.1 Google Fonts の設定
+
+`src/app/layout.tsx` に以下を追加する：
+
+```typescript
+import { Zen_Kaku_Gothic_New, Unbounded, Manrope, Oswald, Sora, Raleway } from 'next/font/google'
+
+const zenKakuGothicNew = Zen_Kaku_Gothic_New({
+  weight: ['300', '400', '500', '700', '900'],
+  subsets: ['latin'],
+  variable: '--font-ja',
+  display: 'swap',
+})
+
+const unbounded = Unbounded({
+  weight: ['400', '700', '900'],
+  subsets: ['latin'],
+  variable: '--font-display',
+  display: 'swap',
+})
+
+const manrope = Manrope({
+  weight: ['400', '500', '600'],
+  subsets: ['latin'],
+  variable: '--font-body',
+  display: 'swap',
+})
+
+const oswald = Oswald({
+  weight: ['400', '500', '600'],
+  subsets: ['latin'],
+  variable: '--font-heading',
+  display: 'swap',
+})
+
+const sora = Sora({
+  weight: ['300', '400'],
+  subsets: ['latin'],
+  variable: '--font-caption',
+  display: 'swap',
+})
+
+const raleway = Raleway({
+  weight: ['300', '400', '500'],
+  subsets: ['latin'],
+  variable: '--font-concept',
+  display: 'swap',
+})
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <html lang="ja" className={[
+      zenKakuGothicNew.variable,
+      unbounded.variable,
+      manrope.variable,
+      oswald.variable,
+      sora.variable,
+      raleway.variable,
+    ].join(' ')}>
+      <body>{children}</body>
+    </html>
+  )
+}
+```
+
+### 12.2 Tailwind CSS の設定
+
+`tailwind.config.ts` に以下を追加する：
+
+```typescript
+import type { Config } from 'tailwindcss'
+
+const config: Config = {
+  theme: {
+    extend: {
+      fontFamily: {
+        ja:      ['var(--font-ja)', 'sans-serif'],
+        display: ['var(--font-display)', 'sans-serif'],  // Unbounded
+        heading: ['var(--font-heading)', 'sans-serif'],  // Oswald
+        body:    ['var(--font-body)', 'sans-serif'],      // Manrope
+        concept: ['var(--font-concept)', 'sans-serif'],  // Raleway
+        caption: ['var(--font-caption)', 'sans-serif'],  // Sora
+      },
+    },
+  },
+}
+export default config
+```
+
+### 12.3 用途別の使用方法
+
+```tsx
+// キャッチ・数字強調（Unbounded）
+<h1 className="font-display font-black text-6xl">98</h1>
+
+// 章タイトル（Oswald）
+<h2 className="font-heading font-semibold text-2xl">01 現状認識</h2>
+
+// 本文（Manrope）
+<p className="font-body font-normal text-base leading-relaxed">
+  100人がサイトを見ても...
+</p>
+
+// コンセプトワード・引用（Raleway）
+<blockquote className="font-concept font-light text-xl tracking-wide">
+  会いたい人が、自分から来る採用へ。
+</blockquote>
+
+// キャプション・注記（Sora）
+<span className="font-caption font-light text-sm text-gray-500">
+  ※CDへの注記
+</span>
+
+// 日本語テキスト（Zen Kaku Gothic New）
+<p className="font-ja">日本語のテキストはすべてこれ</p>
+```
+
+---
+
+## 13. Phase 3 で追加する内容（参考）
 
 - AG-07-VISUALの実装（DALL-E 3 API連携）
 - ポジショニングマップのSVGレンダリング（カスタムSVGコンポーネント）
