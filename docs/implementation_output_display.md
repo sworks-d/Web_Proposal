@@ -2263,3 +2263,202 @@ useEffect(() => {
   OutputSectionRenderer の中身は空になるが、
   「クリックで展開する」動作自体は先に実装可能
 ```
+
+---
+
+## 11. max_tokens 不足による途中切れ対策
+
+### 問題の現状（実機確認済み・2026-04-01）
+
+AG-02（市場分析）・AG-03（競合分析）で出力が途中で切れている。
+末尾が文章の途中 or JSONが閉じていない状態でDBに保存されている。
+
+```
+AG-02末尾: "...低下にも" （文章途中で終了・10035文字）
+AG-03末尾: '"detail": "...共存するが' （JSON未閉・12354文字）
+AG-01末尾: ``` （コードフェンス途中）
+```
+
+現在の max_tokens 設定が出力量に対して不足している。
+
+### 修正1：AG別に max_tokens を適切な値に設定
+
+```typescript
+// src/agents/base-agent.ts
+
+// AG別の出力量に応じた max_tokens
+const AG_MAX_TOKENS: Record<string, number> = {
+  'AG-01': 4096,   // インテーク：構造化情報・中程度
+  'AG-02': 8192,   // 市場分析：業種知識+競合情報で多い
+  'AG-03': 8192,   // 競合分析：複数社分析で多い
+  'AG-04': 6144,   // 課題構造化：中〜多
+  'AG-05': 4096,   // ファクトチェック：検証項目で中程度
+  'AG-06': 8192,   // 設計草案：IA+ページ構成で多い
+  'AG-07': 8192,   // ストーリー：全章分のコピーで多い
+}
+
+// base-agent.ts の API呼び出し箇所
+const response = await anthropicClient.messages.create({
+  model: this.model,
+  max_tokens: AG_MAX_TOKENS[this.id] ?? 4096,  // AG別に設定
+  system: systemPrompt,
+  messages: [{ role: 'user', content: userMessage }],
+})
+```
+
+### 修正2：途中切れの検出関数
+
+```typescript
+// src/lib/json-cleaner.ts に追加
+
+/**
+ * JSON出力が途中で切れているか検出する
+ */
+export function isTruncated(raw: string): boolean {
+  if (!raw || raw.length === 0) return true
+  const trimmed = raw.trimEnd()
+
+  // パターン1: 波括弧・角括弧の開閉数が一致しない
+  const openBraces  = (trimmed.match(/\{/g) ?? []).length
+  const closeBraces = (trimmed.match(/\}/g) ?? []).length
+  const openBracks  = (trimmed.match(/\[/g) ?? []).length
+  const closeBracks = (trimmed.match(/\]/g) ?? []).length
+  if (openBraces > closeBraces) return true
+  if (openBracks > closeBracks) return true
+
+  // パターン2: 末尾がJSONの正常な終端でない
+  // 正常な終端: } ] " 数値 true false null
+  if (!trimmed.match(/[}\]"0-9]|true|false|null\s*$/)) return true
+
+  // パターン3: コードフェンスが閉じていない
+  const fenceOpen  = (trimmed.match(/```/g) ?? []).length
+  if (fenceOpen % 2 !== 0) return true
+
+  return false
+}
+```
+
+### 修正3：保存時に truncated フラグを記録
+
+```typescript
+// src/agents/base-agent.ts の保存処理
+
+const rawText = response.content[0].type === 'text'
+  ? response.content[0].text : ''
+
+// stop_reason を確認（max_tokensで止まった場合 "max_tokens" になる）
+const stopReason = response.stop_reason  // "end_turn" | "max_tokens" | "stop_sequence"
+const truncated  = stopReason === 'max_tokens' || isTruncated(rawText)
+
+await prisma.agentResult.create({
+  data: {
+    executionId: execution.id,
+    agentId: this.id,
+    outputJson: rawText,
+    parseError: truncated,
+    parseErrorMessage: truncated
+      ? `出力が途中で切れました（stop_reason: ${stopReason}）`
+      : null,
+  }
+})
+
+// 切れていた場合はExecution.statusをERRORに
+if (truncated) {
+  await prisma.execution.update({
+    where: { id: execution.id },
+    data: { status: 'ERROR' }
+  })
+}
+```
+
+### 修正4：UI での表示と自動再実行
+
+```typescript
+// src/components/pipeline/CompletedAgentSection.tsx（または OutputPanel）
+
+// parseError が true の場合の表示
+{result.parseError && (
+  <div style={{
+    background: 'rgba(230,48,34,0.06)',
+    border: '1px solid rgba(230,48,34,0.3)',
+    padding: '12px 16px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '12px',
+  }}>
+    <div style={{ fontFamily: 'Sora, sans-serif', fontSize: '12px', color: 'var(--ink2)' }}>
+      ⚠️ {result.parseErrorMessage ?? '出力が途中で切れました'}
+    </div>
+    <button
+      onClick={() => rerunAgent(execution.agentId)}
+      style={{
+        background: 'var(--ink)',
+        color: 'var(--bg)',
+        border: 'none',
+        fontFamily: 'Unbounded, sans-serif',
+        fontSize: '8px',
+        fontWeight: 700,
+        letterSpacing: '0.15em',
+        textTransform: 'uppercase',
+        padding: '8px 16px',
+        cursor: 'pointer',
+        whiteSpace: 'nowrap',
+        flexShrink: 0,
+      }}
+    >
+      ↺ 再実行
+    </button>
+  </div>
+)}
+```
+
+### 修正5：単体 AG 再実行 API
+
+```typescript
+// src/app/api/versions/[id]/rerun/route.ts（新規作成）
+
+export async function POST(
+  req: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  const { agentId } = await req.json()
+
+  // 既存のERROR状態のExecutionを削除して新規作成
+  const existing = await prisma.execution.findFirst({
+    where: { versionId: params.id, agentId }
+  })
+  if (existing) {
+    await prisma.agentResult.deleteMany({ where: { executionId: existing.id } })
+    await prisma.execution.delete({ where: { id: existing.id } })
+  }
+
+  // 新規Executionを作成して実行
+  const execution = await prisma.execution.create({
+    data: { versionId: params.id, agentId, status: 'RUNNING' }
+  })
+
+  // 非同期でAGを実行（既存のpipeline処理を流用）
+  runSingleAgent(params.id, agentId, execution.id).catch(console.error)
+
+  return NextResponse.json({ executionId: execution.id })
+}
+```
+
+### 実装優先順位
+
+```
+Priority 1（即効性あり・先にやる）:
+  base-agent.ts の max_tokens を AG別に設定
+  AG-02・03・06・07 は 8192 に変更
+  → これだけで大半の途中切れが解消される
+
+Priority 2（検出と記録）:
+  isTruncated() 関数を json-cleaner.ts に追加
+  stop_reason チェックを保存処理に追加
+  AgentResult.parseError / parseErrorMessage に記録
+
+Priority 3（UI対応）:
+  parseError=true の場合に「⚠️ 途中で切れました」+ 「↺ 再実行」ボタン
+  /api/versions/[id]/rerun エンドポイントで単体再実行
+```
