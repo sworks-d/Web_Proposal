@@ -1,0 +1,101 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Client {
+  id        String    @id @default(cuid())
+  name      String    @unique
+  industry  String?
+  size      String?
+  notes     String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  projects  Project[]
+}
+
+model Project {
+  id           String            @id @default(cuid())
+  clientId     String
+  client       Client            @relation(fields: [clientId], references: [id])
+  title        String
+  briefText    String
+  industryType String            @default("general")
+  status       String            @default("ACTIVE")   // ACTIVE | ARCHIVED
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+  versions     ProposalVersion[]
+}
+
+// ── バージョン管理の核心 ──
+model ProposalVersion {
+  id             String          @id @default(cuid())
+  projectId      String
+  project        Project         @relation(fields: [projectId], references: [id])
+  versionNumber  Int
+  label          String?
+  changeReason   String?
+  status         String          @default("DRAFT")    // DRAFT | RUNNING | CHECKPOINT | COMPLETED | ERROR
+
+  primaryAgent   String          @default("ag-02-general")
+  subAgents      String          @default("[]")       // JSON array as string
+  secondaryAgent String?
+
+  parentVersionId String?
+  parentVersion   ProposalVersion?  @relation("VersionHistory", fields: [parentVersionId], references: [id])
+  childVersions   ProposalVersion[] @relation("VersionHistory")
+
+  cdNotes        String?          // JSON: { [agentId]: "CDが追加した情報" }
+
+  createdAt      DateTime         @default(now())
+  completedAt    DateTime?
+  executions     Execution[]
+  slides         ProposalSlide[]
+}
+
+// ── 各AG実行 ──
+model Execution {
+  id                     String          @id @default(cuid())
+  versionId              String
+  version                ProposalVersion @relation(fields: [versionId], references: [id])
+  agentId                String
+  mode                   String          @default("FULL")    // FULL | SPOT
+  status                 String          @default("RUNNING") // RUNNING | WAITING_REVIEW | COMPLETED | ERROR
+  isInherited            Boolean         @default(false)
+  inheritedFromVersionId String?
+  startedAt              DateTime        @default(now())
+  completedAt            DateTime?
+  results                AgentResult[]
+}
+
+model AgentResult {
+  id          String    @id @default(cuid())
+  executionId String
+  execution   Execution @relation(fields: [executionId], references: [id])
+  agentId     String
+  outputJson  String
+  editedJson  String?
+  approvedAt  DateTime?
+  createdAt   DateTime  @default(now())
+}
+
+// ── 企画書スライド（AG-07出力から生成）──
+model ProposalSlide {
+  id          String          @id @default(cuid())
+  versionId   String
+  version     ProposalVersion @relation(fields: [versionId], references: [id])
+  slideNumber Int
+  chapterId   String
+  sectionId   String
+  title       String
+  catchCopy   String?
+  body        String
+  slideType   String          @default("CONTENT")  // COVER | CHAPTER_TITLE | CONTENT | TABLE_OF_CONTENTS | APPENDIX
+  layoutHint  String?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+}
