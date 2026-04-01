@@ -1899,3 +1899,144 @@ Priority B（ダイアログUI）:
 Priority C（詳細ページ）:
   - EditBriefPanel の下部に「この案件を削除する」を追加
 ```
+
+---
+
+## 9. AG出力スキーマの統一修正（最優先・根本修正）
+
+### 問題の現状（実機確認済み・2026-04-01）
+
+Claude Codeが全AGに「sectionsラッパー」を実装している。
+実際のoutputJsonの構造：
+
+```json
+{
+  "agentId": "AG-01",
+  "sections": [
+    { "id": "project-summary", "title": "案件サマリー", "content": "実際のテキスト" },
+    { "id": "missing-info", "title": "不足情報リスト", "content": "..." }
+  ]
+}
+```
+
+さらにAG-02〜07はsections[0].contentの中に ```json付きの生JSONが入っている：
+
+```json
+{
+  "agentId": "AG-02",
+  "sections": [{
+    "id": "raw-output",
+    "title": "市場分析結果（パース失敗）",
+    "content": "```json\n{ \"marketStructure\": { ... } }\n```"
+  }]
+}
+```
+
+これが全ての問題の根本原因：
+- `output-renderer.ts` のマッパーが参照するフィールドが存在しない → 空表示
+- sectionsラッパーがある限り `safeParseJson` で取り出したJSONも使えない
+
+### 修正方針：sectionsラッパーを除去してAGの生JSONを直接保存する
+
+**各AGエージェントの実行処理を修正する（src/agents/ 以下の全ファイル）：**
+
+```typescript
+// 変更前（Claude Codeの現在の実装・全AG共通）
+const result = {
+  agentId: this.id,
+  sections: [
+    { id: 'raw-output', title: '...（パース失敗）', content: rawText }
+  ]
+}
+await prisma.agentResult.create({
+  data: { outputJson: JSON.stringify(result) }
+})
+
+// 変更後：AGの生出力テキストをそのまま保存
+// （パース処理はPreviewPanel側で行う）
+await prisma.agentResult.create({
+  data: { outputJson: rawText }  // ← sectionsラッパーを除去して生テキストをそのまま保存
+})
+```
+
+**具体的に修正するファイル（src/agents/ 以下）：**
+
+```
+src/agents/ag-01-intake.ts   ← sections形式で返している箇所を修正
+src/agents/ag-02-base.ts     ← 同上
+src/agents/ag-02-recruit.ts  ← 同上（各AG-02系全て）
+src/agents/ag-03-competitor.ts
+src/agents/ag-04-insight.ts
+src/agents/ag-05-factcheck.ts
+src/agents/ag-06-draft.ts
+src/agents/ag-07-story.ts
+src/agents/base-agent.ts     ← ここに共通処理があるはず
+```
+
+**base-agent.ts の修正箇所（推定）：**
+
+```typescript
+// src/agents/base-agent.ts
+
+async execute(input: AgentInput): Promise<void> {
+  const response = await anthropicClient.messages.create({ ... })
+  const rawText = response.content[0].text
+
+  // 変更前: sectionsラッパーに包んで保存
+  // const wrapped = { agentId: this.id, sections: [{ content: rawText, ... }] }
+  // await prisma.agentResult.create({ data: { outputJson: JSON.stringify(wrapped) } })
+
+  // 変更後: 生テキストをそのまま保存（パースはUI側で行う）
+  await prisma.agentResult.create({
+    data: {
+      executionId: execution.id,
+      agentId: this.id,
+      outputJson: rawText,  // ← 生テキストをそのまま
+    }
+  })
+}
+```
+
+### 修正後の動作確認手順
+
+```bash
+# 1. 既存のDBデータをリセット（古いsections形式のデータを除去）
+npx prisma db push --force-reset
+# または: 中部電力の案件を削除して新規作成し直す
+
+# 2. npm run dev でサーバー再起動
+
+# 3. 新規案件でフルパイプラインを実行
+
+# 4. ブラウザのDevToolsで以下を確認：
+#    /api/versions/{id} のレスポンスを見て
+#    executions[].results[].outputJson が生JSONになっていること
+#    （sectionsラッパーが消えていること）
+```
+
+### 修正後にPreviewPanelが正しく動作する流れ
+
+```
+AGが生JSONをoutputJsonに保存
+  ↓
+PreviewPanel が outputJson を取得
+  ↓
+safeParseJson(outputJson) でJSONを安全にパース
+  （```json付きでもコードフェンスを除去して抽出）
+  ↓
+renderAgentOutput(agentId, parsedJson) でセクション配列に変換
+  ↓
+OutputSectionRenderer でCDが読める形で表示
+```
+
+### 実装優先順位（Section 9が全ての前提）
+
+```
+最優先: base-agent.ts（または各AG）のsectionsラッパーを除去
+        → outputJson = rawText（生テキスト）で保存
+
+次に: safeParseJson / output-renderer / OutputSectionRenderer の実装
+     （Section 1・2・3 の内容）
+
+その後: 過去AG参照・チェックポイントインライン化（Section 5・6）
+```
