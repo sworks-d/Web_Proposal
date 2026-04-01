@@ -1054,3 +1054,499 @@ Priority 3（チェックポイント表示の改善）:
 Priority 4（パース失敗時のUX改善）:
   - AGレールに「↺ 再実行」ボタンを追加
 ```
+
+---
+
+## 7. 要件（インプット）の編集機能
+
+### 問題の現状
+
+プロジェクト作成後、以下の情報を変更する手段が存在しない：
+- クライアント名・案件タイトル
+- 業界タイプ
+- 依頼内容（briefText）
+- 既存サイトURL
+
+ヒアリングで情報が更新された場合・入力ミスがあった場合に対処できない。
+
+### 設計方針
+
+```
+編集できる場所を2か所設ける：
+
+[1] プロジェクト詳細ページのヘッダー部分
+    → クライアント名・案件タイトルをインライン編集
+
+[2] 「要件を編集」サイドパネル（新規）
+    → briefText・業界タイプ・既存サイトURLの変更
+    → 変更後に「どこから再実行するか」を選ばせる
+```
+
+### 7.1 API：プロジェクト情報の更新
+
+```typescript
+// src/app/api/projects/[id]/route.ts に PATCH を追加
+
+export async function PATCH(
+  req: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  const body = await req.json()
+  const { title, briefText, industryType, clientName, existingSiteUrl } = body
+
+  // プロジェクト本体を更新
+  const updated = await prisma.project.update({
+    where: { id: params.id },
+    data: {
+      title:        title        ?? undefined,
+      briefText:    briefText    ?? undefined,
+      industryType: industryType ?? undefined,
+      updatedAt:    new Date(),
+    },
+  })
+
+  // クライアント名の変更はClientモデルを更新
+  if (clientName) {
+    await prisma.client.update({
+      where: { id: updated.clientId },
+      data: { name: clientName },
+    })
+  }
+
+  return NextResponse.json(updated)
+}
+```
+
+### 7.2 ヘッダーのインライン編集（クライアント名・案件タイトル）
+
+```typescript
+// src/app/projects/[id]/page.tsx のヘッダー部分
+
+// 現在: テキスト表示のみ（「中部電力 ー キャリアサイトリニューアル」）
+// 変更後: クリックでインライン編集可能にする
+
+function ProjectHeader({ project, onUpdate }) {
+  const [editingTitle, setEditingTitle] = useState(false)
+  const [titleValue, setTitleValue] = useState(project.title)
+
+  const handleTitleSave = async () => {
+    await fetch(`/api/projects/${project.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: titleValue }),
+    })
+    setEditingTitle(false)
+    onUpdate()
+  }
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+      <span style={{ color: 'var(--ink3)', fontSize: '9px' }}>
+        {project.client.name}
+      </span>
+      <span style={{ color: 'var(--ink4)' }}>—</span>
+
+      {editingTitle ? (
+        // インライン編集フォーム
+        <input
+          value={titleValue}
+          onChange={e => setTitleValue(e.target.value)}
+          onBlur={handleTitleSave}
+          onKeyDown={e => e.key === 'Enter' && handleTitleSave()}
+          autoFocus
+          style={{
+            fontFamily: 'Sora, sans-serif',
+            fontSize: '11px',
+            color: 'var(--ink)',
+            background: 'transparent',
+            border: 'none',
+            borderBottom: '1px solid var(--red)',
+            outline: 'none',
+            padding: '2px 0',
+            minWidth: '200px',
+          }}
+        />
+      ) : (
+        // 通常表示（クリックで編集）
+        <span
+          onClick={() => setEditingTitle(true)}
+          title="クリックして編集"
+          style={{
+            fontFamily: 'Sora, sans-serif',
+            fontSize: '11px',
+            color: 'var(--ink3)',
+            cursor: 'text',
+            borderBottom: '1px dashed transparent',
+            transition: 'border-color 0.15s',
+          }}
+          onMouseEnter={e => (e.currentTarget.style.borderBottomColor = 'var(--ink4)')}
+          onMouseLeave={e => (e.currentTarget.style.borderBottomColor = 'transparent')}
+        >
+          {project.title}
+        </span>
+      )}
+
+      {/* 要件編集ボタン */}
+      <button
+        onClick={onOpenEditPanel}
+        style={{
+          background: 'transparent',
+          border: '1px solid var(--line2)',
+          color: 'var(--ink3)',
+          fontFamily: 'Unbounded, sans-serif',
+          fontSize: '8px',
+          fontWeight: 700,
+          letterSpacing: '0.15em',
+          textTransform: 'uppercase',
+          padding: '5px 12px',
+          cursor: 'pointer',
+          transition: 'all 0.15s',
+          marginLeft: '8px',
+        }}
+        onMouseEnter={e => {
+          e.currentTarget.style.borderColor = 'var(--ink)'
+          e.currentTarget.style.color = 'var(--ink)'
+        }}
+        onMouseLeave={e => {
+          e.currentTarget.style.borderColor = 'var(--line2)'
+          e.currentTarget.style.color = 'var(--ink3)'
+        }}
+      >
+        ✎ 要件を編集
+      </button>
+    </div>
+  )
+}
+```
+
+### 7.3 要件編集パネル（briefText・業界タイプ・既存サイトURL）
+
+```typescript
+// src/components/project/EditBriefPanel.tsx（新規作成）
+// 右サイドから slide-in するパネル形式
+
+interface EditBriefPanelProps {
+  project: Project & { client: Client }
+  isOpen: boolean
+  onClose: () => void
+  onSaved: (rerunFrom?: string) => void  // 保存後に再実行するAGを渡す
+}
+
+export function EditBriefPanel({ project, isOpen, onClose, onSaved }: EditBriefPanelProps) {
+  const [values, setValues] = useState({
+    clientName:    project.client.name,
+    title:         project.title,
+    briefText:     project.briefText,
+    industryType:  project.industryType,
+    existingSiteUrl: project.existingSiteUrl ?? '',
+  })
+  const [saving, setSaving] = useState(false)
+
+  // 変更を検出してどのAGから再実行が必要か判定
+  const getRerunRecommendation = () => {
+    const briefChanged = values.briefText !== project.briefText
+    const industryChanged = values.industryType !== project.industryType
+    const metaChanged = values.title !== project.title
+                     || values.clientName !== project.client.name
+                     || values.existingSiteUrl !== (project.existingSiteUrl ?? '')
+
+    if (briefChanged) return 'AG-01'      // 最上流から全部再実行
+    if (industryChanged) return 'AG-02'   // 市場分析から再実行
+    if (metaChanged) return null           // DB更新のみ・再実行不要
+    return null
+  }
+
+  const rerunFrom = getRerunRecommendation()
+
+  const handleSave = async () => {
+    setSaving(true)
+    await fetch(`/api/projects/${project.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(values),
+    })
+    setSaving(false)
+    onSaved(rerunFrom ?? undefined)
+    onClose()
+  }
+
+  if (!isOpen) return null
+
+  return (
+    // オーバーレイ（背景薄暗く）
+    <div style={{
+      position: 'fixed', inset: 0,
+      background: 'rgba(252,251,239,0.7)',
+      backdropFilter: 'blur(4px)',
+      zIndex: 200,
+      display: 'flex',
+      justifyContent: 'flex-end',
+    }}>
+      {/* パネル本体（右から slide-in） */}
+      <div style={{
+        width: '480px',
+        height: '100%',
+        background: 'var(--bg)',
+        borderLeft: '1px solid var(--line2)',
+        display: 'flex',
+        flexDirection: 'column',
+        overflowY: 'auto',
+      }}>
+
+        {/* パネルヘッダー */}
+        <div style={{
+          padding: '24px 28px',
+          borderBottom: '1px solid var(--line)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+        }}>
+          <div>
+            <div style={{
+              fontFamily: 'Raleway, sans-serif',
+              fontStyle: 'italic',
+              fontSize: '11px',
+              color: 'var(--ink3)',
+              marginBottom: '5px',
+            }}>
+              要件を編集
+            </div>
+            <div style={{
+              fontFamily: 'Unbounded, sans-serif',
+              fontSize: '18px',
+              fontWeight: 900,
+              letterSpacing: '-0.02em',
+              textTransform: 'uppercase',
+              color: 'var(--ink)',
+            }}>
+              {project.client.name}
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            style={{
+              background: 'none', border: 'none',
+              fontSize: '18px', color: 'var(--ink3)',
+              cursor: 'pointer',
+            }}
+          >✕</button>
+        </div>
+
+        {/* フォーム */}
+        <div style={{ padding: '28px', flex: 1, display: 'flex', flexDirection: 'column', gap: '24px' }}>
+
+          {/* クライアント名 */}
+          <FieldGroup label="クライアント名">
+            <input
+              value={values.clientName}
+              onChange={e => setValues(v => ({ ...v, clientName: e.target.value }))}
+              style={inputStyle}
+            />
+          </FieldGroup>
+
+          {/* 案件タイトル */}
+          <FieldGroup label="案件タイトル">
+            <input
+              value={values.title}
+              onChange={e => setValues(v => ({ ...v, title: e.target.value }))}
+              style={inputStyle}
+            />
+          </FieldGroup>
+
+          {/* 業界タイプ */}
+          <FieldGroup label="業界タイプ" note="変更するとAG-02以降の再実行が必要です">
+            <select
+              value={values.industryType}
+              onChange={e => setValues(v => ({ ...v, industryType: e.target.value }))}
+              style={{ ...inputStyle, appearance: 'none' }}
+            >
+              <option value="ag-02-recruit">採用・リクルート</option>
+              <option value="ag-02-brand">ブランド体験</option>
+              <option value="ag-02-corp">コーポレート</option>
+              <option value="ag-02-ec">EC・購買</option>
+              <option value="ag-02-camp">キャンペーン</option>
+              <option value="ag-02-btob">BtoB・法人向け</option>
+              <option value="ag-02-general">その他（汎用）</option>
+            </select>
+          </FieldGroup>
+
+          {/* 既存サイトURL */}
+          <FieldGroup label="既存サイトURL" note="リニューアル案件の場合に入力してください">
+            <input
+              value={values.existingSiteUrl}
+              onChange={e => setValues(v => ({ ...v, existingSiteUrl: e.target.value }))}
+              placeholder="https://..."
+              style={inputStyle}
+            />
+          </FieldGroup>
+
+          {/* 依頼内容（briefText）*/}
+          <FieldGroup
+            label="依頼内容・オリエン情報"
+            note="変更するとAG-01から全フェーズの再実行が必要です"
+          >
+            <textarea
+              value={values.briefText}
+              onChange={e => setValues(v => ({ ...v, briefText: e.target.value }))}
+              rows={10}
+              style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit' }}
+            />
+          </FieldGroup>
+        </div>
+
+        {/* フッター：再実行の警告 + 保存ボタン */}
+        <div style={{
+          padding: '20px 28px',
+          borderTop: '1px solid var(--line)',
+        }}>
+          {/* 再実行が必要な場合の警告 */}
+          {rerunFrom && (
+            <div style={{
+              background: 'rgba(232,196,74,0.1)',
+              border: '1px solid rgba(232,196,74,0.5)',
+              padding: '12px 16px',
+              marginBottom: '16px',
+              borderRadius: '2px',
+            }}>
+              <p style={{
+                fontFamily: 'Sora, sans-serif',
+                fontSize: '12px',
+                color: 'var(--ink2)',
+                lineHeight: 1.6,
+              }}>
+                ⚠️ この変更を反映するには
+                <strong> {rerunFrom} から再実行</strong>が必要です。
+                保存後にバージョンを更新してください。
+              </p>
+            </div>
+          )}
+
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button
+              onClick={onClose}
+              style={{
+                flex: 1,
+                background: 'transparent',
+                border: '1px solid var(--line2)',
+                color: 'var(--ink2)',
+                fontFamily: 'Unbounded, sans-serif',
+                fontSize: '9px',
+                fontWeight: 700,
+                letterSpacing: '0.15em',
+                textTransform: 'uppercase',
+                padding: '12px',
+                cursor: 'pointer',
+              }}
+            >
+              キャンセル
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              style={{
+                flex: 2,
+                background: 'var(--ink)',
+                color: 'var(--bg)',
+                border: 'none',
+                fontFamily: 'Unbounded, sans-serif',
+                fontSize: '9px',
+                fontWeight: 700,
+                letterSpacing: '0.15em',
+                textTransform: 'uppercase',
+                padding: '12px',
+                cursor: 'pointer',
+              }}
+            >
+              {saving ? '保存中...' : '保存する →'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// 共通フィールドグループ
+function FieldGroup({ label, note, children }) {
+  return (
+    <div>
+      <div style={{
+        fontFamily: 'Unbounded, sans-serif',
+        fontSize: '9px',
+        fontWeight: 700,
+        letterSpacing: '0.2em',
+        textTransform: 'uppercase',
+        color: 'var(--ink3)',
+        marginBottom: '8px',
+      }}>
+        {label}
+        {note && (
+          <span style={{
+            fontFamily: 'Sora, sans-serif',
+            fontWeight: 400,
+            fontSize: '9px',
+            color: '#E8C44A',
+            marginLeft: '8px',
+            letterSpacing: '0.05em',
+            textTransform: 'none',
+          }}>
+            ⚠️ {note}
+          </span>
+        )}
+      </div>
+      {children}
+    </div>
+  )
+}
+
+const inputStyle = {
+  width: '100%',
+  background: 'var(--bg2)',
+  border: '1px solid var(--line2)',
+  padding: '11px 14px',
+  fontFamily: 'Sora, "Zen Kaku Gothic New", sans-serif',
+  fontSize: '13px',
+  color: 'var(--ink)',
+  outline: 'none',
+  transition: 'border-color 0.15s',
+}
+```
+
+### 7.4 保存後のバージョン更新フロー
+
+```typescript
+// src/app/projects/[id]/page.tsx
+
+const handleBriefSaved = (rerunFrom?: string) => {
+  if (!rerunFrom) {
+    // DB更新のみ・再実行不要
+    // プロジェクト情報を再フェッチして表示を更新
+    mutate()
+    return
+  }
+
+  // 再実行が必要な場合：CreateUpdateModalを開く
+  setCreateUpdateConfig({
+    changeReason: `要件変更（${rerunFrom}から再実行）`,
+    agentsToRerun: AGENT_ORDER.slice(AGENT_ORDER.indexOf(rerunFrom)),
+    // AG-01なら全AG、AG-02なら02〜07
+  })
+  setShowCreateUpdateModal(true)
+}
+```
+
+### 7.5 実装優先順位（Section 7）
+
+```
+Priority A（すぐ実装・DBのみ）:
+  - PATCH /api/projects/[id] を追加
+  - ヘッダーのタイトルインライン編集
+
+Priority B（UIコンポーネント）:
+  - EditBriefPanel コンポーネントを作成
+  - 「✎ 要件を編集」ボタンをプロジェクト詳細ヘッダーに配置
+
+Priority C（再実行との連携）:
+  - 保存後に rerunFrom を検出して CreateUpdateModal に渡す
+  - バージョン更新フローと接続する
+```
