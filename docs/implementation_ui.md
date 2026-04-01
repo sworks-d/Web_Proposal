@@ -1648,3 +1648,567 @@ document.querySelectorAll('.ag-row').forEach(row => {
 </body>
 </html>
 ```
+
+---
+
+## 11. 完了画面フィードバック設計
+
+### 概要
+
+AG-07完了後・ダウンロード前にアンケート画面を表示する。
+フィードバックはDBに保存され、プロンプト自動ブラッシュアップの入力として使われる。
+
+```
+AG-07完了
+  ↓
+目次・スライドプレビュー画面
+  ↓
+「ダウンロード」クリック
+  ↓
+[フィードバック画面（2分以内）]← ここを新設
+  ↓
+Markdownダウンロード
+```
+
+### DBスキーマ追加
+
+```prisma
+model ProposalFeedback {
+  id              String   @id @default(cuid())
+  versionId       String
+  version         ProposalVersion @relation(fields: [versionId], references: [id])
+  overallScore    Int               // Q1: 1〜5
+  weakestAgent    String            // Q2: "AG-02"|"AG-03"|"AG-04"|"AG-06"|"AG-07"|"none"
+  competitorScore Int               // Q3: 1〜3
+  targetScore     Int               // Q4: 1〜3
+  storyUsability  String            // Q5: "that_usable"|"needs_edit"|"rebuild"
+  bestChapter     String            // Q6: chapterId
+  freeComment     String?           // Q7: 100字以内・任意
+  submittedAt     DateTime @default(now())
+
+  // 自動処理フラグ（フィードバック後に自動付与）
+  autoFlagAgents  String   @default("[]") // 改善候補AGのJSON配列
+  processed       Boolean  @default(false)
+}
+```
+
+### API Routes
+
+```typescript
+// src/app/api/feedback/route.ts
+
+// POST: フィードバック保存 + 自動フラグ処理
+export async function POST(req: NextRequest) {
+  const body = await req.json()
+
+  // 自動フラグ処理：評価が低いAGを改善候補に
+  const autoFlagAgents: string[] = []
+  if (body.weakestAgent !== 'none') autoFlagAgents.push(body.weakestAgent)
+  if (body.competitorScore <= 2) autoFlagAgents.push('ag-03-competitor')
+  if (body.targetScore <= 2) autoFlagAgents.push('ag-04-insight')
+  if (body.storyUsability === 'rebuild') autoFlagAgents.push('ag-07-story')
+
+  const feedback = await prisma.proposalFeedback.create({
+    data: {
+      ...body,
+      autoFlagAgents: JSON.stringify([...new Set(autoFlagAgents)]),
+    },
+  })
+
+  // freeCommentがある場合はプロンプト改善の入力候補として保存
+  if (body.freeComment && autoFlagAgents.length > 0) {
+    // 最も弱かったAGのPromptVersionに改善候補コメントとして記録
+    // （実際の適用はCDが判断・prompt-improve skillで処理）
+    await prisma.promptVersion.create({
+      data: {
+        agentId: autoFlagAgents[0],
+        version: -1, // pending改善案のフラグ
+        content: '',
+        changeNote: `フィードバック由来の改善候補: ${body.freeComment}`,
+        cdFeedback: body.freeComment,
+      },
+    })
+  }
+
+  return NextResponse.json({ id: feedback.id })
+}
+
+// GET: 集計データの取得（Settings画面で表示）
+export async function GET() {
+  const feedbacks = await prisma.proposalFeedback.findMany({
+    orderBy: { submittedAt: 'desc' },
+    take: 50,
+  })
+
+  const summary = {
+    avgOverallScore: average(feedbacks.map(f => f.overallScore)),
+    avgCompetitorScore: average(feedbacks.map(f => f.competitorScore)),
+    avgTargetScore: average(feedbacks.map(f => f.targetScore)),
+    weakestAgentDistribution: countBy(feedbacks, 'weakestAgent'),
+    storyUsabilityDistribution: countBy(feedbacks, 'storyUsability'),
+    totalFeedbacks: feedbacks.length,
+    recentFreeComments: feedbacks
+      .filter(f => f.freeComment)
+      .slice(0, 10)
+      .map(f => ({ comment: f.freeComment, agentFlags: JSON.parse(f.autoFlagAgents) })),
+  }
+
+  return NextResponse.json(summary)
+}
+```
+
+### フィードバック画面コンポーネント（実装仕様）
+
+```typescript
+// src/components/feedback/FeedbackModal.tsx
+
+// トリガー: ダウンロードボタンをクリックした時
+// スキップ可能（「スキップしてダウンロード」ボタンあり）
+// プログレスバー：7問中何問目かを表示
+
+interface FeedbackModalProps {
+  versionId: string
+  chapters: { id: string; title: string }[]  // AG-07のstoryLine
+  onComplete: () => void   // フィードバック送信後にダウンロード開始
+  onSkip: () => void       // スキップしてダウンロード
+}
+```
+
+### 承認済みフィードバック画面HTML
+
+以下のHTMLが承認済みのフィードバック画面デザインです。
+デザイントーン（FCFBEF背景・Unbounded・赤アクセント）を統一しています。
+
+```html
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>フィードバック</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@400;700;900&family=Manrope:wght@400;500;600&family=Zen+Kaku+Gothic+New:wght@300;400;700&family=Sora:wght@300;400&family=Raleway:ital,wght@1,300;1,400&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#FCFBEF;--bg2:#F5F3E2;--ink:#1C1C17;--ink2:#4A4A3E;--ink3:#8A8A78;--ink4:#C4C4AC;
+  --red:#E63022;--line:rgba(28,28,23,0.10);--line2:rgba(28,28,23,0.16);
+  --fd:′Unbounded′,sans-serif;--fb:′Manrope′,′Zen Kaku Gothic New′,sans-serif;
+  --fc:′Sora′,′Zen Kaku Gothic New′,sans-serif;--fi:′Raleway′,sans-serif;
+}
+html,body{background:var(--bg);color:var(--ink);font-family:'Manrope','Zen Kaku Gothic New',sans-serif;min-height:100vh}
+
+/* ── OVERLAY ── */
+.ov{position:fixed;inset:0;background:rgba(252,251,239,0.92);backdrop-filter:blur(6px);z-index:300;display:flex;align-items:center;justify-content:center;padding:20px}
+.modal{width:100%;max-width:620px;background:var(--bg);border:1px solid var(--line2);box-shadow:0 24px 64px rgba(28,28,23,0.10);position:relative;overflow:hidden}
+
+/* ── PROGRESS ── */
+.prog-track{height:3px;background:var(--line);position:relative}
+.prog-fill{height:100%;background:var(--red);transition:width 0.4s ease;width:14%}
+
+/* ── HEADER ── */
+.mhd{padding:24px 28px 18px;border-bottom:1px solid var(--line)}
+.eyebrow{font-family:'Raleway',sans-serif;font-size:11px;font-style:italic;color:var(--red);letter-spacing:0.04em;margin-bottom:6px;display:flex;align-items:center;gap:7px}
+.htitle{font-family:'Unbounded',sans-serif;font-size:20px;font-weight:900;letter-spacing:-0.02em;text-transform:uppercase;color:var(--ink);line-height:1}
+.hdesc{font-family:'Sora','Zen Kaku Gothic New',sans-serif;font-size:12px;color:var(--ink3);margin-top:7px;line-height:1.6}
+.prog-label{font-family:'Unbounded',sans-serif;font-size:9px;font-weight:400;letter-spacing:0.15em;text-transform:uppercase;color:var(--ink4);margin-top:10px}
+
+/* ── BODY ── */
+.mbody{padding:28px 28px 20px}
+.step{display:none}
+.step.on{display:block}
+
+/* QUESTION LABEL */
+.qlabel{font-family:'Raleway',sans-serif;font-size:11px;font-style:italic;color:var(--ink3);letter-spacing:0.04em;margin-bottom:6px}
+.qtext{font-family:'Unbounded',sans-serif;font-size:15px;font-weight:700;color:var(--ink);line-height:1.3;letter-spacing:-0.01em;margin-bottom:20px}
+
+/* STAR RATING */
+.stars{display:flex;gap:6px;margin-bottom:8px}
+.star{width:44px;height:44px;border:1px solid var(--line2);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:20px;transition:all 0.12s;color:var(--ink4);user-select:none}
+.star:hover,.star.on{border-color:var(--red);background:rgba(230,48,34,0.06);color:var(--red)}
+.star-note{display:flex;justify-content:space-between;font-family:'Sora','Zen Kaku Gothic New',sans-serif;font-size:10px;color:var(--ink4)}
+
+/* 3-POINT RATING */
+.pts{display:flex;gap:6px;margin-bottom:4px}
+.pt{flex:1;padding:12px 8px;border:1px solid var(--line2);text-align:center;cursor:pointer;transition:all 0.12s;user-select:none}
+.pt:hover,.pt.on{border-color:var(--red);background:rgba(230,48,34,0.06)}
+.pt-num{font-family:'Unbounded',sans-serif;font-size:18px;font-weight:900;color:var(--ink);line-height:1;margin-bottom:3px}
+.pt.on .pt-num{color:var(--red)}
+.pt-lab{font-family:'Sora','Zen Kaku Gothic New',sans-serif;font-size:10px;color:var(--ink3)}
+
+/* CHOICE BUTTONS */
+.choices{display:flex;flex-direction:column;gap:7px}
+.choice{display:flex;align-items:flex-start;gap:13px;padding:13px 16px;border:1px solid var(--line);cursor:pointer;transition:all 0.12s;user-select:none}
+.choice:hover{background:var(--bg2);border-color:var(--ink4)}
+.choice.on{border-color:var(--red);background:rgba(230,48,34,0.06)}
+.choice-radio{width:15px;height:15px;border:1.5px solid var(--line2);border-radius:50%;flex-shrink:0;margin-top:2px;position:relative;transition:all 0.12s}
+.choice.on .choice-radio{border-color:var(--red);background:var(--red)}
+.choice.on .choice-radio::after{content:'';position:absolute;top:2.5px;left:2.5px;width:8px;height:8px;background:#fff;border-radius:50%}
+.choice-info{}
+.choice-main{font-size:13px;font-weight:600;color:var(--ink)}
+.choice-sub{font-family:'Sora','Zen Kaku Gothic New',sans-serif;font-size:11px;color:var(--ink3);margin-top:2px}
+
+/* CHAPTER GRID */
+.chapgrid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.chap{padding:11px 14px;border:1px solid var(--line);cursor:pointer;transition:all 0.12s;user-select:none}
+.chap:hover{background:var(--bg2)}
+.chap.on{border-color:var(--red);background:rgba(230,48,34,0.06)}
+.chap-num{font-family:'Unbounded',sans-serif;font-size:9px;font-weight:700;color:var(--ink4);letter-spacing:0.1em;margin-bottom:4px}
+.chap.on .chap-num{color:var(--red)}
+.chap-title{font-size:12px;font-weight:600;color:var(--ink);line-height:1.3}
+
+/* FREE TEXT */
+.ftarea{width:100%;border:1px solid var(--line2);background:var(--bg2);padding:13px 16px;font-family:'Sora','Zen Kaku Gothic New',sans-serif;font-size:13px;color:var(--ink);resize:none;height:88px;outline:none;transition:border-color 0.15s}
+.ftarea:focus{border-color:var(--ink4)}
+.ftarea::placeholder{color:var(--ink4)}
+.ftcount{font-family:'Sora','Zen Kaku Gothic New',sans-serif;font-size:10px;color:var(--ink4);text-align:right;margin-top:5px}
+
+/* ── FOOTER ── */
+.mft{padding:16px 28px 22px;border-top:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:12px}
+.btn-skip{background:none;border:none;font-family:'Unbounded',sans-serif;font-size:8px;font-weight:700;letter-spacing:0.15em;text-transform:uppercase;color:var(--ink4);cursor:pointer;transition:color 0.15s;padding:0}
+.btn-skip:hover{color:var(--ink3)}
+.btn-row{display:flex;gap:8px;align-items:center}
+.btn-back{background:transparent;border:1px solid var(--line2);color:var(--ink2);font-family:'Unbounded',sans-serif;font-size:8px;font-weight:700;letter-spacing:0.15em;text-transform:uppercase;padding:10px 18px;cursor:pointer;transition:all 0.14s}
+.btn-back:hover{border-color:var(--ink);color:var(--ink)}
+.btn-next{background:var(--ink);color:var(--bg);font-family:'Unbounded',sans-serif;font-size:9px;font-weight:700;letter-spacing:0.15em;text-transform:uppercase;padding:12px 24px;border:none;cursor:pointer;transition:background 0.15s;display:flex;align-items:center;gap:8px}
+.btn-next:hover{background:var(--red)}
+.btn-next:disabled{background:var(--line);color:var(--ink4);cursor:not-allowed}
+
+/* ── COMPLETE ── */
+.complete{padding:48px 28px;text-align:center;display:none}
+.complete.on{display:block}
+.comp-icon{font-size:36px;margin-bottom:16px}
+.comp-title{font-family:'Unbounded',sans-serif;font-size:22px;font-weight:900;letter-spacing:-0.02em;color:var(--ink);margin-bottom:8px}
+.comp-desc{font-family:'Sora','Zen Kaku Gothic New',sans-serif;font-size:13px;color:var(--ink3);line-height:1.7;margin-bottom:28px}
+.comp-note{font-family:'Raleway',sans-serif;font-style:italic;font-size:12px;color:var(--ink4);margin-bottom:28px}
+.btn-dl{display:inline-flex;align-items:center;gap:10px;background:var(--ink);color:var(--bg);font-family:'Unbounded',sans-serif;font-size:9px;font-weight:700;letter-spacing:0.15em;text-transform:uppercase;padding:14px 28px;border:none;cursor:pointer;transition:background 0.15s}
+.btn-dl:hover{background:var(--red)}
+</style>
+</head>
+<body>
+<div class="ov">
+<div class="modal">
+
+  <!-- PROGRESS BAR -->
+  <div class="prog-track"><div class="prog-fill" id="prog"></div></div>
+
+  <!-- HEADER -->
+  <div class="mhd">
+    <div class="eyebrow">✦ フィードバック</div>
+    <div class="htitle">提案書の品質について</div>
+    <div class="hdesc">回答内容はAGのプロンプト改善に自動で反映されます。約90秒で完了します。</div>
+    <div class="prog-label" id="prog-label">1 / 7</div>
+  </div>
+
+  <!-- ── STEP 1: 全体評価 ── -->
+  <div class="mbody">
+  <div class="step on" id="s1">
+    <div class="qlabel">Q1 — 全体評価</div>
+    <div class="qtext">今回の提案書草案の<br>完成度はどのくらいですか？</div>
+    <div class="stars" id="stars">
+      <div class="star" data-v="1">★</div>
+      <div class="star" data-v="2">★</div>
+      <div class="star" data-v="3">★</div>
+      <div class="star" data-v="4">★</div>
+      <div class="star" data-v="5">★</div>
+    </div>
+    <div class="star-note"><span>使えない</span><span>完璧</span></div>
+  </div>
+
+  <!-- ── STEP 2: 最も薄いフェーズ ── -->
+  <div class="step" id="s2">
+    <div class="qlabel">Q2 — 弱点特定</div>
+    <div class="qtext">最も「薄い・物足りない」と<br>感じたのはどのフェーズですか？</div>
+    <div class="choices" id="choices2">
+      <div class="choice" data-v="ag-02-market">
+        <div class="choice-radio"></div>
+        <div class="choice-info">
+          <div class="choice-main">AG-02 市場・業界分析</div>
+          <div class="choice-sub">市場構造・ターゲット仮説の解像度が低かった</div>
+        </div>
+      </div>
+      <div class="choice" data-v="ag-03-competitor">
+        <div class="choice-radio"></div>
+        <div class="choice-info">
+          <div class="choice-main">AG-03 競合分析</div>
+          <div class="choice-sub">競合の設計意図の読み解きが表面的だった</div>
+        </div>
+      </div>
+      <div class="choice" data-v="ag-04-insight">
+        <div class="choice-radio"></div>
+        <div class="choice-info">
+          <div class="choice-main">AG-04 課題構造化</div>
+          <div class="choice-sub">本質課題の定義が浅かった・Why-Whyが弱かった</div>
+        </div>
+      </div>
+      <div class="choice" data-v="ag-06-draft">
+        <div class="choice-radio"></div>
+        <div class="choice-info">
+          <div class="choice-main">AG-06 設計草案</div>
+          <div class="choice-sub">IA・導線・コンテンツ設計の根拠が弱かった</div>
+        </div>
+      </div>
+      <div class="choice" data-v="ag-07-story">
+        <div class="choice-radio"></div>
+        <div class="choice-info">
+          <div class="choice-main">AG-07 ストーリー・コピー</div>
+          <div class="choice-sub">提案書の流れ・コンセプトワードが響かなかった</div>
+        </div>
+      </div>
+      <div class="choice" data-v="none">
+        <div class="choice-radio"></div>
+        <div class="choice-info">
+          <div class="choice-main">特になし・全体的に満足</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── STEP 3: 競合分析評価 ── -->
+  <div class="step" id="s3">
+    <div class="qlabel">Q3 — 競合分析の深度</div>
+    <div class="qtext">競合サイトの「設計意図の読み解き」は<br>どの程度できていましたか？</div>
+    <div class="pts" id="pts3">
+      <div class="pt" data-v="1">
+        <div class="pt-num">1</div>
+        <div class="pt-lab">表面的<br>だった</div>
+      </div>
+      <div class="pt" data-v="2">
+        <div class="pt-num">2</div>
+        <div class="pt-lab">まあまあ<br>だった</div>
+      </div>
+      <div class="pt" data-v="3">
+        <div class="pt-num">3</div>
+        <div class="pt-lab">十分<br>だった</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── STEP 4: ターゲット評価 ── -->
+  <div class="step" id="s4">
+    <div class="qlabel">Q4 — ターゲット設定の精度</div>
+    <div class="qtext">「誰に・どんな状態で・何を伝えるか」の<br>ターゲット設定は適切でしたか？</div>
+    <div class="pts" id="pts4">
+      <div class="pt" data-v="1">
+        <div class="pt-num">1</div>
+        <div class="pt-lab">ズレが<br>あった</div>
+      </div>
+      <div class="pt" data-v="2">
+        <div class="pt-num">2</div>
+        <div class="pt-lab">概ね<br>合っていた</div>
+      </div>
+      <div class="pt" data-v="3">
+        <div class="pt-num">3</div>
+        <div class="pt-lab">ぴったり<br>だった</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── STEP 5: ストーリー使用感 ── -->
+  <div class="step" id="s5">
+    <div class="qlabel">Q5 — ストーリー構成の使用感</div>
+    <div class="qtext">今回の提案書の章構成・ストーリーラインは<br>実際の提案に使えそうですか？</div>
+    <div class="choices" id="choices5">
+      <div class="choice" data-v="that_usable">
+        <div class="choice-radio"></div>
+        <div class="choice-info">
+          <div class="choice-main">このまま使える</div>
+          <div class="choice-sub">構成・流れともに問題なし</div>
+        </div>
+      </div>
+      <div class="choice" data-v="needs_edit">
+        <div class="choice-radio"></div>
+        <div class="choice-info">
+          <div class="choice-main">一部修正すれば使える</div>
+          <div class="choice-sub">章の順番・コピー等を調整すれば問題なし</div>
+        </div>
+      </div>
+      <div class="choice" data-v="rebuild">
+        <div class="choice-radio"></div>
+        <div class="choice-info">
+          <div class="choice-main">大幅に作り直しが必要</div>
+          <div class="choice-sub">構成・方向性から見直す必要がある</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── STEP 6: 最良のパート ── -->
+  <div class="step" id="s6">
+    <div class="qlabel">Q6 — 最良のパート</div>
+    <div class="qtext">提案書の中で一番<br>「よく書けていた」のはどこですか？</div>
+    <div class="chapgrid" id="chapgrid">
+      <div class="chap" data-v="ch-01"><div class="chap-num">Ch.1</div><div class="chap-title">現状認識の共有</div></div>
+      <div class="chap" data-v="ch-02"><div class="chap-num">Ch.2</div><div class="chap-title">課題の本質定義</div></div>
+      <div class="chap" data-v="ch-03"><div class="chap-num">Ch.3</div><div class="chap-title">解決の方向性</div></div>
+      <div class="chap" data-v="ch-04"><div class="chap-num">Ch.4</div><div class="chap-title">具体的な提案内容</div></div>
+      <div class="chap" data-v="ch-05"><div class="chap-num">Ch.5</div><div class="chap-title">期待効果</div></div>
+      <div class="chap" data-v="ch-06"><div class="chap-num">Ch.6</div><div class="chap-title">進め方・スケジュール</div></div>
+    </div>
+  </div>
+
+  <!-- ── STEP 7: フリーコメント ── -->
+  <div class="step" id="s7">
+    <div class="qlabel">Q7 — AGへの一言（任意）</div>
+    <div class="qtext">AGへのフィードバックを<br>自由に書いてください</div>
+    <textarea class="ftarea" id="freetext" maxlength="100" placeholder="例：「競合分析でサイトの導線まで評価してほしかった」「ターゲットを共働き世帯に絞りすぎた」等"></textarea>
+    <div class="ftcount"><span id="ftcnt">0</span> / 100字</div>
+  </div>
+
+  <!-- ── COMPLETE ── -->
+  <div class="complete" id="complete">
+    <div class="comp-icon">✦</div>
+    <div class="comp-title">ありがとうございます</div>
+    <div class="comp-desc">フィードバックを受け取りました。<br>回答内容はAGのプロンプト改善に<br>自動で反映されます。</div>
+    <div class="comp-note">改善が適用されるのは次回の実行からです</div>
+    <button class="btn-dl" onclick="alert('ダウンロードを開始します')">
+      <span>↓</span> Markdownをダウンロード
+    </button>
+  </div>
+  </div>
+
+  <!-- FOOTER -->
+  <div class="mft" id="footer">
+    <button class="btn-skip" id="btn-skip" onclick="skipAll()">スキップしてダウンロード</button>
+    <div class="btn-row">
+      <button class="btn-back" id="btn-back" onclick="prev()" style="display:none">← 戻る</button>
+      <button class="btn-next" id="btn-next" onclick="next()" disabled>次へ →</button>
+    </div>
+  </div>
+
+</div>
+</div>
+
+<script>
+const TOTAL = 7
+let cur = 1
+const answers = {}
+
+// 選択状態の管理
+function getVal(step) {
+  if (step === 1) return answers.overallScore
+  if (step === 2) return answers.weakestAgent
+  if (step === 3) return answers.competitorScore
+  if (step === 4) return answers.targetScore
+  if (step === 5) return answers.storyUsability
+  if (step === 6) return answers.bestChapter
+  if (step === 7) return answers.freeComment !== undefined ? 'ok' : undefined
+}
+
+// Q1: 星評価
+document.querySelectorAll('.star').forEach(s => {
+  s.addEventListener('click', () => {
+    const v = parseInt(s.dataset.v)
+    answers.overallScore = v
+    document.querySelectorAll('.star').forEach((st, i) => {
+      st.classList.toggle('on', i < v)
+    })
+    checkNext()
+  })
+})
+
+// Q2・Q5: 単一選択
+function bindSingle(groupId, key) {
+  document.querySelectorAll(`#${groupId} .choice`).forEach(c => {
+    c.addEventListener('click', () => {
+      document.querySelectorAll(`#${groupId} .choice`).forEach(x => x.classList.remove('on'))
+      c.classList.add('on')
+      answers[key] = c.dataset.v
+      checkNext()
+    })
+  })
+}
+bindSingle('choices2', 'weakestAgent')
+bindSingle('choices5', 'storyUsability')
+
+// Q3・Q4: 3点評価
+function bindPts(groupId, key) {
+  document.querySelectorAll(`#${groupId} .pt`).forEach(p => {
+    p.addEventListener('click', () => {
+      document.querySelectorAll(`#${groupId} .pt`).forEach(x => x.classList.remove('on'))
+      p.classList.add('on')
+      answers[key] = parseInt(p.dataset.v)
+      checkNext()
+    })
+  })
+}
+bindPts('pts3', 'competitorScore')
+bindPts('pts4', 'targetScore')
+
+// Q6: 章選択
+document.querySelectorAll('#chapgrid .chap').forEach(c => {
+  c.addEventListener('click', () => {
+    document.querySelectorAll('#chapgrid .chap').forEach(x => x.classList.remove('on'))
+    c.classList.add('on')
+    answers.bestChapter = c.dataset.v
+    checkNext()
+  })
+})
+
+// Q7: フリーテキスト（任意なので常にnext可能）
+const ft = document.getElementById('freetext')
+ft.addEventListener('input', () => {
+  const len = ft.value.length
+  document.getElementById('ftcnt').textContent = len
+  answers.freeComment = ft.value || undefined
+})
+
+function checkNext() {
+  const v = getVal(cur)
+  const btn = document.getElementById('btn-next')
+  // Q7は任意なのでいつでも可
+  btn.disabled = (cur < 7 && v === undefined)
+  if (cur === 7) btn.disabled = false
+}
+
+function updateUI() {
+  // ステップ表示
+  for (let i = 1; i <= 7; i++) {
+    document.getElementById(`s${i}`).classList.toggle('on', i === cur)
+  }
+  // プログレス
+  document.getElementById('prog').style.width = `${(cur / TOTAL) * 100}%`
+  document.getElementById('prog-label').textContent = `${cur} / ${TOTAL}`
+  // 戻るボタン
+  document.getElementById('btn-back').style.display = cur > 1 ? '' : 'none'
+  // 次へボタンのラベル
+  const btn = document.getElementById('btn-next')
+  btn.textContent = cur === TOTAL ? '送信してダウンロード →' : '次へ →'
+  checkNext()
+}
+
+function next() {
+  if (cur < TOTAL) {
+    cur++
+    updateUI()
+  } else {
+    submit()
+  }
+}
+
+function prev() {
+  if (cur > 1) { cur--; updateUI() }
+}
+
+function submit() {
+  // API送信（実装時: fetch POST /api/feedback）
+  console.log('送信:', answers)
+  // 完了画面へ
+  document.querySelector('.mbody').style.display = 'none'
+  document.getElementById('footer').style.display = 'none'
+  document.querySelector('.mhd').style.display = 'none'
+  document.querySelector('.prog-track').style.display = 'none'
+  document.getElementById('complete').classList.add('on')
+}
+
+function skipAll() {
+  submit()
+}
+
+updateUI()
+</script>
+</body>
+</html>
+
+```
