@@ -1550,3 +1550,352 @@ Priority C（再実行との連携）:
   - 保存後に rerunFrom を検出して CreateUpdateModal に渡す
   - バージョン更新フローと接続する
 ```
+
+---
+
+## 8. 案件削除機能
+
+### 設計方針
+
+```
+削除対象：Project（案件）
+連鎖削除：Project → ProposalVersion → Execution
+          → AgentResult → ProposalSlide → ProposalFeedback
+誤削除防止：案件名入力による確認ダイアログ必須
+ゴミ箱なし：完全削除のみ
+```
+
+### 8.1 API：案件削除
+
+```typescript
+// src/app/api/projects/[id]/route.ts に DELETE を追加
+
+export async function DELETE(
+  req: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  // 連鎖削除（Prismaのcascadeが設定されていない場合は手動で順番に削除）
+  // schema.prisma で onDelete: Cascade が設定済みなら1行で済む
+
+  // 手動で連鎖削除する場合（安全側）
+  const versions = await prisma.proposalVersion.findMany({
+    where: { projectId: params.id },
+    include: { executions: true }
+  })
+
+  for (const version of versions) {
+    for (const execution of version.executions) {
+      await prisma.agentResult.deleteMany({ where: { executionId: execution.id } })
+      await prisma.execution.delete({ where: { id: execution.id } })
+    }
+    await prisma.proposalSlide.deleteMany({ where: { versionId: version.id } })
+    await prisma.proposalFeedback.deleteMany({ where: { versionId: version.id } })
+    await prisma.proposalVersion.delete({ where: { id: version.id } })
+  }
+
+  await prisma.project.delete({ where: { id: params.id } })
+
+  return NextResponse.json({ success: true })
+}
+```
+
+**schema.prismaのリレーションにcascadeを追加しておくと上記が1行になる：**
+
+```prisma
+// 既存のリレーション定義に onDelete: Cascade を追加
+model ProposalVersion {
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  // ...
+}
+model Execution {
+  versionId String
+  version   ProposalVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  // ...
+}
+model AgentResult {
+  executionId String
+  execution   Execution @relation(fields: [executionId], references: [id], onDelete: Cascade)
+  // ...
+}
+model ProposalSlide {
+  versionId String
+  version   ProposalVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  // ...
+}
+model ProposalFeedback {
+  versionId String
+  version   ProposalVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  // ...
+}
+// cascadeを設定後: npx prisma db push
+```
+
+### 8.2 削除確認ダイアログ
+
+```typescript
+// src/components/project/DeleteProjectDialog.tsx（新規作成）
+
+interface DeleteProjectDialogProps {
+  project: Project & { client: Client }
+  isOpen: boolean
+  onClose: () => void
+  onDeleted: () => void  // 削除完了後にダッシュボードへリダイレクト
+}
+
+export function DeleteProjectDialog({
+  project, isOpen, onClose, onDeleted
+}: DeleteProjectDialogProps) {
+  const [inputValue, setInputValue] = useState('')
+  const [deleting, setDeleting] = useState(false)
+  const confirmText = project.client.name  // 案件名の入力で確認
+
+  const canDelete = inputValue === confirmText
+
+  const handleDelete = async () => {
+    if (!canDelete) return
+    setDeleting(true)
+    await fetch(`/api/projects/${project.id}`, { method: 'DELETE' })
+    setDeleting(false)
+    onDeleted()
+  }
+
+  if (!isOpen) return null
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0,
+      background: 'rgba(252,251,239,0.88)',
+      backdropFilter: 'blur(6px)',
+      zIndex: 300,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+    }}>
+      <div style={{
+        width: '480px',
+        background: 'var(--bg)',
+        border: '1px solid var(--line2)',
+        boxShadow: '0 24px 64px rgba(28,28,23,0.12)',
+      }}>
+
+        {/* ヘッダー */}
+        <div style={{
+          padding: '24px 28px 20px',
+          borderBottom: '1px solid var(--line)',
+        }}>
+          <div style={{
+            fontFamily: 'Raleway, sans-serif',
+            fontStyle: 'italic',
+            fontSize: '11px',
+            color: 'var(--red)',
+            marginBottom: '7px',
+            display: 'flex', alignItems: 'center', gap: '6px',
+          }}>
+            ⚠ 削除の確認
+          </div>
+          <div style={{
+            fontFamily: 'Unbounded, sans-serif',
+            fontSize: '20px', fontWeight: 900,
+            letterSpacing: '-0.02em', textTransform: 'uppercase',
+            color: 'var(--ink)',
+          }}>
+            案件を削除する
+          </div>
+        </div>
+
+        {/* ボディ */}
+        <div style={{ padding: '24px 28px' }}>
+          <p style={{
+            fontFamily: 'Sora, sans-serif',
+            fontSize: '13px', lineHeight: 1.75,
+            color: 'var(--ink2)',
+            marginBottom: '20px',
+          }}>
+            <strong style={{ color: 'var(--ink)' }}>
+              {project.client.name} — {project.title}
+            </strong>
+            を完全に削除します。
+            全バージョン・AG出力・スライドデータが失われます。
+            この操作は取り消せません。
+          </p>
+
+          {/* 確認入力 */}
+          <div style={{ marginBottom: '6px' }}>
+            <label style={{
+              fontFamily: 'Unbounded, sans-serif',
+              fontSize: '9px', fontWeight: 700,
+              letterSpacing: '0.2em', textTransform: 'uppercase',
+              color: 'var(--ink3)',
+              display: 'block', marginBottom: '8px',
+            }}>
+              確認のため「{confirmText}」と入力してください
+            </label>
+            <input
+              value={inputValue}
+              onChange={e => setInputValue(e.target.value)}
+              placeholder={confirmText}
+              autoFocus
+              style={{
+                width: '100%',
+                background: 'var(--bg2)',
+                border: `1px solid ${canDelete ? 'var(--red)' : 'var(--line2)'}`,
+                padding: '11px 14px',
+                fontFamily: 'Sora, sans-serif',
+                fontSize: '13px', color: 'var(--ink)',
+                outline: 'none',
+                transition: 'border-color 0.15s',
+              }}
+            />
+          </div>
+        </div>
+
+        {/* フッター */}
+        <div style={{
+          padding: '16px 28px 24px',
+          borderTop: '1px solid var(--line)',
+          display: 'flex', gap: '8px',
+        }}>
+          <button
+            onClick={onClose}
+            style={{
+              flex: 1,
+              background: 'transparent',
+              border: '1px solid var(--line2)',
+              color: 'var(--ink2)',
+              fontFamily: 'Unbounded, sans-serif',
+              fontSize: '9px', fontWeight: 700,
+              letterSpacing: '0.15em', textTransform: 'uppercase',
+              padding: '12px', cursor: 'pointer',
+            }}
+          >
+            キャンセル
+          </button>
+          <button
+            onClick={handleDelete}
+            disabled={!canDelete || deleting}
+            style={{
+              flex: 2,
+              background: canDelete ? 'var(--red)' : 'var(--line)',
+              color: canDelete ? '#fff' : 'var(--ink4)',
+              border: 'none',
+              fontFamily: 'Unbounded, sans-serif',
+              fontSize: '9px', fontWeight: 700,
+              letterSpacing: '0.15em', textTransform: 'uppercase',
+              padding: '12px', cursor: canDelete ? 'pointer' : 'not-allowed',
+              transition: 'background 0.15s',
+            }}
+          >
+            {deleting ? '削除中...' : '削除する'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+```
+
+### 8.3 削除ボタンの配置
+
+**場所1：ダッシュボードのプロジェクトカード**
+
+```typescript
+// src/app/page.tsx のプロジェクトカード
+
+// カードにホバー時に「...」メニューを表示
+// メニュー内に「削除」を配置
+
+<div
+  className="project-card"
+  onMouseEnter={() => setHoveredCard(project.id)}
+  onMouseLeave={() => setHoveredCard(null)}
+>
+  {/* 既存のカードコンテンツ */}
+
+  {hoveredCard === project.id && (
+    <button
+      onClick={(e) => {
+        e.stopPropagation()  // カードのクリックを止める
+        setDeleteTarget(project)
+      }}
+      style={{
+        position: 'absolute', top: '12px', right: '12px',
+        background: 'transparent',
+        border: '1px solid var(--line2)',
+        color: 'var(--ink3)',
+        fontFamily: 'Unbounded, sans-serif',
+        fontSize: '8px', fontWeight: 700,
+        letterSpacing: '0.1em', textTransform: 'uppercase',
+        padding: '4px 10px', cursor: 'pointer',
+        transition: 'all 0.15s',
+      }}
+      onMouseEnter={e => {
+        e.currentTarget.style.borderColor = 'var(--red)'
+        e.currentTarget.style.color = 'var(--red)'
+      }}
+      onMouseLeave={e => {
+        e.currentTarget.style.borderColor = 'var(--line2)'
+        e.currentTarget.style.color = 'var(--ink3)'
+      }}
+    >
+      削除
+    </button>
+  )}
+</div>
+
+{deleteTarget && (
+  <DeleteProjectDialog
+    project={deleteTarget}
+    isOpen={true}
+    onClose={() => setDeleteTarget(null)}
+    onDeleted={() => {
+      setDeleteTarget(null)
+      router.refresh()  // 一覧を更新
+    }}
+  />
+)}
+```
+
+**場所2：プロジェクト詳細ページの「✎ 要件を編集」パネル内**
+
+```typescript
+// src/components/project/EditBriefPanel.tsx のフッター下部に追加
+
+<div style={{ padding: '0 28px 24px' }}>
+  <button
+    onClick={() => {
+      onClose()
+      onOpenDeleteDialog()
+    }}
+    style={{
+      width: '100%',
+      background: 'transparent',
+      border: '1px solid rgba(230,48,34,0.3)',
+      color: 'var(--red)',
+      fontFamily: 'Unbounded, sans-serif',
+      fontSize: '8px', fontWeight: 700,
+      letterSpacing: '0.15em', textTransform: 'uppercase',
+      padding: '10px', cursor: 'pointer',
+      transition: 'all 0.15s',
+    }}
+    onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--red)'}
+    onMouseLeave={e => e.currentTarget.style.borderColor = 'rgba(230,48,34,0.3)'}
+  >
+    ⚠ この案件を削除する
+  </button>
+</div>
+```
+
+### 8.4 実装優先順位
+
+```
+Priority A（API・最優先）:
+  - schema.prisma に onDelete: Cascade を追加
+  - npx prisma db push
+  - DELETE /api/projects/[id] を実装
+
+Priority B（ダイアログUI）:
+  - DeleteProjectDialog コンポーネントを作成
+  - ダッシュボードのカードにホバーで削除ボタンを追加
+
+Priority C（詳細ページ）:
+  - EditBriefPanel の下部に「この案件を削除する」を追加
+```
