@@ -2040,3 +2040,226 @@ OutputSectionRenderer でCDが読める形で表示
 
 その後: 過去AG参照・チェックポイントインライン化（Section 5・6）
 ```
+
+---
+
+## 10. サイドバーAGから完了データへのアクセス
+
+### 問題の現状（実機確認済み）
+
+左サイドバーの各AGアイテムは全て「待機中」表示のまま。
+完了済みのAGをクリックしても右パネルに何も表示されない。
+実行中・完了後ともに過去のAG出力を参照する手段がない。
+
+### 修正箇所：src/app/projects/[id]/page.tsx と AgentRail
+
+```typescript
+// src/app/projects/[id]/page.tsx
+
+// 状態管理を追加
+const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null)
+
+// 完了済みAGのデータをversionから取得する関数
+const getCompletedResult = (agentId: string) => {
+  const execution = version?.executions
+    ?.filter(e => e.status === 'COMPLETED')
+    .find(e => e.agentId === agentId)
+  return execution?.results?.[0] ?? null
+}
+
+// サイドバーのAGをクリックした時の処理
+const handleAgentClick = (agentId: string) => {
+  const result = getCompletedResult(agentId)
+  if (!result) return  // 完了していなければ何もしない
+  setSelectedAgentId(agentId)
+  // 右パネルの該当セクションへスクロール
+  document.getElementById(`ag-section-${agentId}`)
+    ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
+```
+
+### AgentRail の修正
+
+```typescript
+// src/components/pipeline/AgentRail.tsx（または AgentRailItem）
+// 現状：全AG が opacity:0.35 の待機中表示のまま
+// 修正：完了済みAGをクリック可能にする
+
+// 各AGアイテムの状態判定
+const getAgentStatus = (agentId: string, executions: Execution[]) => {
+  const ex = executions?.find(e => e.agentId === agentId)
+  if (!ex) return 'pending'
+  if (ex.status === 'COMPLETED') return 'done'
+  if (ex.status === 'RUNNING') return 'active'
+  if (ex.status === 'ERROR') return 'error'
+  return 'pending'
+}
+
+// スタイルの分岐
+// done   → opacity:1, cursor:pointer, hover時に背景変化
+// active → 赤ライン + 点滅ドット
+// error  → 赤文字 + cursor:pointer（再実行可能）
+// pending → opacity:0.35, cursor:default
+
+// クリックハンドラーの付与（doneとerrorのみ）
+<div
+  onClick={() => status === 'done' || status === 'error'
+    ? onAgentClick(agentId)
+    : undefined
+  }
+  style={{
+    cursor: status === 'done' || status === 'error' ? 'pointer' : 'default',
+    opacity: status === 'pending' ? 0.35 : 1,
+    // ...その他スタイル
+  }}
+>
+  {/* ステータスアイコン */}
+  <div style={{ /* ... */ }}>
+    {status === 'done' && '✓'}
+    {status === 'active' && agentId.replace('AG-', '')}
+    {status === 'error' && '!'}
+    {status === 'pending' && agentId.replace('AG-', '')}
+  </div>
+
+  <div>
+    <div>{AG_LABELS[agentId]}</div>
+    <div style={{ fontSize: '10px', color: 'var(--ink3)' }}>
+      {status === 'done' && 'クリックで参照 ▾'}
+      {status === 'active' && '実行中...'}
+      {status === 'error' && 'エラー — クリックで確認'}
+      {status === 'pending' && '待機中'}
+    </div>
+  </div>
+</div>
+```
+
+### 右パネル：選択されたAGの出力をセクションとして表示
+
+```typescript
+// src/app/projects/[id]/page.tsx の右パネル部分
+
+// 完了済みAGを新しい順（AG-07→AG-01）で表示
+// selectedAgentId のセクションを展開状態で表示する
+
+const AGENT_ORDER = ['AG-01','AG-02','AG-03','AG-04','AG-05','AG-06','AG-07']
+
+const completedExecutions = AGENT_ORDER
+  .map(id => version?.executions?.find(e => e.agentId === id && e.status === 'COMPLETED'))
+  .filter(Boolean)
+  .reverse()  // AG-07→AG-01 の順
+
+// 右パネルのスクロールコンテナ内
+<div style={{ overflowY: 'auto', flex: 1 }}>
+
+  {/* 現在実行中のAG */}
+  {activeExecution && <ActiveAgentSection execution={activeExecution} />}
+
+  {/* 完了済みAGを折りたたみ式で表示 */}
+  {completedExecutions.map(execution => {
+    const isSelected = selectedAgentId === execution.agentId
+    const result = execution.results?.[0]
+    const parsed = result ? safeParseJson(result.editedJson ?? result.outputJson) : null
+    const sections = renderAgentOutput(execution.agentId, parsed, result?.outputJson)
+
+    return (
+      <div
+        key={execution.agentId}
+        id={`ag-section-${execution.agentId}`}  // スクロールターゲット
+        style={{ borderBottom: '1px solid var(--line)' }}
+      >
+        {/* セクションヘッダー（常に表示） */}
+        <div
+          onClick={() => setSelectedAgentId(
+            isSelected ? null : execution.agentId
+          )}
+          style={{
+            padding: '14px 40px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            cursor: 'pointer',
+            background: isSelected ? 'var(--bg2)' : 'transparent',
+            transition: 'background 0.12s',
+            borderLeft: isSelected ? '2px solid var(--red)' : '2px solid transparent',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            {/* 完了アイコン */}
+            <div style={{
+              width: '22px', height: '22px',
+              background: isSelected ? 'var(--red)' : 'var(--ink)',
+              color: 'var(--bg)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: '10px', borderRadius: '2px',
+              transition: 'background 0.12s',
+            }}>✓</div>
+
+            <div>
+              <div style={{
+                fontFamily: 'Unbounded, sans-serif',
+                fontSize: '9px', fontWeight: 700,
+                letterSpacing: '0.15em', textTransform: 'uppercase',
+                color: 'var(--ink)',
+              }}>
+                {execution.agentId} — {AG_LABELS[execution.agentId]}
+              </div>
+              {execution.isInherited && (
+                <div style={{
+                  fontFamily: 'Sora, sans-serif',
+                  fontSize: '9px', color: 'var(--ink3)',
+                  marginTop: '2px',
+                }}>
+                  前バージョンから引き継ぎ
+                </div>
+              )}
+            </div>
+          </div>
+
+          <span style={{
+            fontFamily: 'Sora, sans-serif',
+            fontSize: '10px', color: 'var(--ink3)',
+          }}>
+            {isSelected ? '閉じる ▴' : '参照する ▾'}
+          </span>
+        </div>
+
+        {/* 展開時のコンテンツ */}
+        {isSelected && (
+          <div style={{ borderTop: '1px solid var(--line)' }}>
+            <OutputSectionRenderer sections={sections} />
+          </div>
+        )}
+      </div>
+    )
+  })}
+</div>
+```
+
+### サイドバーと右パネルの連動
+
+```typescript
+// サイドバーのAGをクリック → 右パネルの該当セクションが展開＆スクロール
+// 右パネルのセクションヘッダーをクリック → 展開/折りたたみ切り替え
+// どちらからでも同じ selectedAgentId を操作する（単一状態で管理）
+
+// selectedAgentId が変わった時に自動スクロール
+useEffect(() => {
+  if (!selectedAgentId) return
+  const el = document.getElementById(`ag-section-${selectedAgentId}`)
+  el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}, [selectedAgentId])
+```
+
+### 実装優先順位
+
+```
+1. getAgentStatus() でAGの状態を正しく判定する
+2. AgentRail の完了済みAGに cursor:pointer と hover を付ける
+3. サイドバークリックで selectedAgentId をセットする
+4. 右パネルに completedExecutions を折りたたみ式で表示する
+5. selectedAgentId の変更で自動スクロールする
+
+※ Section 9（スキーマ修正）が完了していないと
+  OutputSectionRenderer の中身は空になるが、
+  「クリックで展開する」動作自体は先に実装可能
+```
