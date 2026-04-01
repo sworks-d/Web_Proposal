@@ -2462,3 +2462,275 @@ Priority 3（UI対応）:
   parseError=true の場合に「⚠️ 途中で切れました」+ 「↺ 再実行」ボタン
   /api/versions/[id]/rerun エンドポイントで単体再実行
 ```
+
+---
+
+## 12. AG実行中のプロセス可視化
+
+### 問題の現状
+
+AG実行中に「AG-02 実行中...」だけ表示される。
+何が起きているか・あとどれくらいかかるか全く不明。
+30〜90秒の待機時間が不安になる。
+
+### 実装方針：ストリーミング出力
+
+Claude APIはServer-Sent Events（SSE）でのストリーミングに対応している。
+テキストが生成されるにつれてリアルタイムで画面に流す。
+
+### Step 1：APIのストリーミング対応
+
+```typescript
+// src/agents/base-agent.ts
+
+// 変更前: await で全部完了してから返す
+const response = await anthropicClient.messages.create({
+  model: this.model,
+  max_tokens: AG_MAX_TOKENS[this.id],
+  system: systemPrompt,
+  messages: [{ role: 'user', content: userMessage }],
+})
+const rawText = response.content[0].text
+
+// 変更後: stream で少しずつ受け取る
+// onChunk コールバックで受け取ったテキストをリアルタイムに送信
+async execute(
+  input: AgentInput,
+  onChunk?: (text: string) => void  // ← ストリーミングコールバック追加
+): Promise<void> {
+  let rawText = ''
+
+  const stream = await anthropicClient.messages.stream({
+    model: this.model,
+    max_tokens: AG_MAX_TOKENS[this.id],
+    system: systemPrompt,
+    messages: [{ role: 'user', content: userMessage }],
+  })
+
+  for await (const chunk of stream) {
+    if (chunk.type === 'content_block_delta'
+        && chunk.delta.type === 'text_delta') {
+      rawText += chunk.delta.text
+      onChunk?.(chunk.delta.text)  // フロントに送信
+    }
+  }
+
+  const finalMessage = await stream.finalMessage()
+  const stopReason = finalMessage.stop_reason
+
+  // 以降はrawTextを使って既存の保存処理へ
+}
+```
+
+### Step 2：APIルートをSSE対応にする
+
+```typescript
+// src/app/api/executions/pipeline/route.ts（または resume/route.ts）
+
+import { NextRequest } from 'next/server'
+
+export async function POST(req: NextRequest) {
+  const body = await req.json()
+
+  // SSE（Server-Sent Events）でレスポンスを返す
+  const encoder = new TextEncoder()
+  const stream = new ReadableStream({
+    async start(controller) {
+      const send = (event: string, data: any) => {
+        const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`
+        controller.enqueue(encoder.encode(payload))
+      }
+
+      try {
+        // AG実行開始を通知
+        send('agent_start', { agentId: 'AG-02', label: '市場・業界分析' })
+
+        // テキストチャンクを逐次送信
+        await agent.execute(input, (chunk) => {
+          send('text_chunk', { text: chunk })
+        })
+
+        // 完了を通知
+        send('agent_complete', { agentId: 'AG-02', status: 'COMPLETED' })
+
+      } catch (error) {
+        send('agent_error', { agentId: 'AG-02', message: error.message })
+      } finally {
+        controller.close()
+      }
+    }
+  })
+
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+    },
+  })
+}
+```
+
+### Step 3：フロントエンドでSSEを受信してリアルタイム表示
+
+```typescript
+// src/app/projects/[id]/page.tsx
+
+const [streamingText, setStreamingText] = useState('')
+const [streamingAgentId, setStreamingAgentId] = useState<string | null>(null)
+
+const runPipeline = async () => {
+  // fetchではなくEventSourceを使う
+  const es = new EventSource(`/api/executions/stream?versionId=${version.id}`)
+
+  es.addEventListener('agent_start', (e) => {
+    const { agentId } = JSON.parse(e.data)
+    setStreamingAgentId(agentId)
+    setStreamingText('')  // テキストをリセット
+  })
+
+  es.addEventListener('text_chunk', (e) => {
+    const { text } = JSON.parse(e.data)
+    setStreamingText(prev => prev + text)  // テキストを追加
+  })
+
+  es.addEventListener('agent_complete', (e) => {
+    setStreamingAgentId(null)
+    setStreamingText('')
+    // バージョンデータを再フェッチ
+    mutate()
+  })
+
+  es.addEventListener('agent_error', (e) => {
+    const { message } = JSON.parse(e.data)
+    setError(message)
+    es.close()
+  })
+
+  // パイプライン全体完了時
+  es.addEventListener('pipeline_complete', () => {
+    es.close()
+    mutate()
+  })
+}
+```
+
+### Step 4：ストリーミング表示コンポーネント
+
+```typescript
+// 実行中のAGパネル表示
+
+function StreamingAgentPanel({
+  agentId,
+  streamingText,
+}: {
+  agentId: string
+  streamingText: string
+}) {
+  const textRef = useRef<HTMLDivElement>(null)
+
+  // テキストが増えるたびに最下部にスクロール
+  useEffect(() => {
+    textRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [streamingText])
+
+  return (
+    <div style={{ borderBottom: '1px solid var(--line)' }}>
+
+      {/* ヘッダー */}
+      <div style={{
+        padding: '14px 40px',
+        background: 'var(--bg2)',
+        borderLeft: '2px solid var(--red)',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '12px',
+      }}>
+        <ThinkingDots />
+        <span style={{
+          fontFamily: 'Unbounded, sans-serif',
+          fontSize: '9px', fontWeight: 700,
+          letterSpacing: '0.15em', textTransform: 'uppercase',
+          color: 'var(--red)',
+        }}>
+          {agentId} — {AG_LABELS[agentId]} 実行中
+        </span>
+        {/* 経過時間 */}
+        <ElapsedTimer />
+      </div>
+
+      {/* ストリーミングテキスト */}
+      {streamingText && (
+        <div style={{
+          padding: '20px 40px',
+          background: 'var(--bg2)',
+          borderTop: '1px solid var(--line)',
+          maxHeight: '280px',
+          overflowY: 'auto',
+        }}>
+          <div style={{
+            fontFamily: 'Sora, "Zen Kaku Gothic New", sans-serif',
+            fontSize: '12px',
+            lineHeight: 1.85,
+            color: 'var(--ink2)',
+            fontStyle: 'italic',
+            whiteSpace: 'pre-wrap',
+            wordBreak: 'break-word',
+          }}>
+            {streamingText}
+            <span style={{  // カーソル点滅
+              display: 'inline-block',
+              width: '2px', height: '13px',
+              background: 'var(--red)',
+              verticalAlign: 'middle',
+              marginLeft: '2px',
+              animation: 'blink 1s step-end infinite',
+            }} />
+          </div>
+          <div ref={textRef} />
+        </div>
+      )}
+    </div>
+  )
+}
+
+// 経過時間タイマー
+function ElapsedTimer() {
+  const [seconds, setSeconds] = useState(0)
+  useEffect(() => {
+    const t = setInterval(() => setSeconds(s => s + 1), 1000)
+    return () => clearInterval(t)
+  }, [])
+  return (
+    <span style={{
+      fontFamily: 'Sora, sans-serif',
+      fontSize: '10px', color: 'var(--ink3)',
+      marginLeft: 'auto',
+    }}>
+      {seconds}s
+    </span>
+  )
+}
+```
+
+### 実装優先順位
+
+```
+Priority 1（効果が大きい・先にやる）:
+  base-agent.ts のAPIコールをstreamingに変更
+  onChunkコールバックでテキストを受け取る
+
+Priority 2（SSEルート）:
+  /api/executions/stream を新規作成
+  EventSource で agent_start / text_chunk / agent_complete を送信
+
+Priority 3（フロント表示）:
+  StreamingAgentPanel コンポーネントを作成
+  streamingText を useState で管理
+  テキストが流れるにつれて自動スクロール
+  経過時間タイマーを表示
+
+Priority 4（UX改善）:
+  推定残り時間の表示（AGごとの平均実行時間から算出）
+  文字数・トークン数のカウンター表示
+```
