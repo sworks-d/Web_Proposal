@@ -692,3 +692,365 @@ Priority 4（パース失敗時のUX改善）:
   - AGレールに「↺ 再実行」ボタンを追加
   - エラー状態のスタイルを赤枠で明示する
 ```
+
+---
+
+## 5. 実行中の過去AG出力への横断アクセス（Priority 2と同時実装）
+
+### 問題の現状
+
+現在の実装では：
+- チェックポイントが全面に表示されると背後のAGレールが隠れる
+- 実行が進むにつれて「現在実行中のAG」の出力しか右パネルに表示されない
+- AG-01が完了しても、AG-06実行中はAG-01の出力を参照する手段がない
+
+### 設計方針
+
+```
+チェックポイントは「モーダルオーバーレイ」から
+「右パネルの差し込みセクション」に変更する。
+
+AGレールは常に全AG分が見えていて、
+完了済みAGはクリックで出力を右パネルに表示できる。
+
+チェックポイントが来たら、右パネルの上部に
+チェックポイントセクションが展開されるが、
+下の過去AG出力は引き続きスクロールでアクセス可能。
+```
+
+### 5.1 レイアウト変更：チェックポイントをインラインに
+
+```typescript
+// src/app/projects/[id]/page.tsx
+
+// 変更前: チェックポイントをモーダルオーバーレイで表示
+// → 背後が全て隠れる・過去出力にアクセス不可
+
+// 変更後: 右パネル内に差し込むインラインセクションとして表示
+
+// 右パネルの構造:
+//
+// ┌─────────────────────────────────────────────┐
+// │ ✋ チェックポイント③（固定・折りたたみ可）   │  ← 黄色バナーで目立たせる
+// │ AG選択・ヒアリング項目・判断                 │  ← 折りたたみ可
+// ├─────────────────────────────────────────────┤
+// │ AG-07 実行中... ●●●                        │  ← 現在実行中のAG
+// ├─────────────────────────────────────────────┤
+// │ ▸ AG-06 設計草案 — 完了           [参照]   │  ← 折りたたみ済み
+// │ ▸ AG-05 ファクトチェック — 完了   [参照]   │
+// │ ▸ AG-04 課題構造化 — 完了         [参照]   │
+// │ ▸ AG-03 競合分析 — 完了           [参照]   │
+// │ ▸ AG-02 市場分析 — 完了           [参照]   │
+// │ ▸ AG-01 インテーク — 完了         [参照]   │
+// └─────────────────────────────────────────────┘
+//
+// → 各AGの「▸」をクリックで展開・内容を確認できる
+
+const [expandedAgents, setExpandedAgents] = useState<Set<string>>(new Set())
+
+const toggleAgent = (agentId: string) => {
+  setExpandedAgents(prev => {
+    const next = new Set(prev)
+    next.has(agentId) ? next.delete(agentId) : next.add(agentId)
+    return next
+  })
+}
+```
+
+### 5.2 AGレール：完了済みAGをクリック可能にする
+
+```typescript
+// src/components/pipeline/AgentRail.tsx
+
+// 変更前: 完了済みAGはクリックしても何も起きない（または右パネルが切り替わらない）
+// 変更後: クリックで右パネルの該当AGセクションをスクロールして展開する
+
+interface AgentRailProps {
+  executions: Execution[]
+  activeAgentId: string
+  onSelectAgent: (agentId: string) => void  // ← この関数を実装
+}
+
+// クリック時の挙動:
+// 1. expandedAgentsにそのAGを追加（展開状態にする）
+// 2. 右パネルの該当セクションにスクロール
+//    document.getElementById(`section-${agentId}`)?.scrollIntoView({ behavior: 'smooth' })
+// 3. AGレールでそのAGをハイライト表示
+
+// レール項目のスタイル:
+// done（完了）: opacity:1 + cursor:pointer + ホバーで背景変化 + "クリックで参照"テキスト
+// active（実行中）: 赤ライン + 点滅インジケーター
+// pending（未実行）: opacity:0.35 + cursor:default（クリック不可）
+```
+
+### 5.3 右パネル：全AG出力を時系列逆順で表示
+
+```typescript
+// src/components/pipeline/OutputPanel.tsx（新規作成または既存改修）
+
+// 表示順: 現在実行中 → 完了済み（新しい順）
+
+interface OutputPanelProps {
+  version: ProposalVersion & { executions: (Execution & { results: AgentResult[] })[] }
+  checkpointState: CheckpointState | null  // チェックポイント情報
+  expandedAgents: Set<string>
+  onToggleAgent: (agentId: string) => void
+}
+
+export function OutputPanel({
+  version, checkpointState, expandedAgents, onToggleAgent
+}: OutputPanelProps) {
+  const sortedExecutions = [...version.executions]
+    .sort((a, b) => AGENT_ORDER.indexOf(b.agentId) - AGENT_ORDER.indexOf(a.agentId))
+    // 実行済みを新しい順（AG-07→AG-01）で並べる
+
+  return (
+    <div style={{ overflowY: 'auto', height: '100%' }}>
+
+      {/* チェックポイントセクション（存在する場合のみ表示）*/}
+      {checkpointState && (
+        <CheckpointInlineSection
+          state={checkpointState}
+          onApprove={...}
+        />
+      )}
+
+      {/* 現在実行中のAG */}
+      {activeExecution && (
+        <ActiveAgentSection execution={activeExecution} />
+      )}
+
+      {/* 完了済みAGの出力（折りたたみ式）*/}
+      {sortedExecutions
+        .filter(e => e.status === 'COMPLETED')
+        .map(execution => (
+          <CompletedAgentSection
+            key={execution.agentId}
+            id={`section-${execution.agentId}`}  // スクロール用ID
+            execution={execution}
+            isExpanded={expandedAgents.has(execution.agentId)}
+            onToggle={() => onToggleAgent(execution.agentId)}
+          />
+        ))
+      }
+    </div>
+  )
+}
+```
+
+### 5.4 CompletedAgentSection コンポーネント
+
+```typescript
+// 折りたたみ式の完了AG出力セクション
+
+function CompletedAgentSection({
+  id, execution, isExpanded, onToggle
+}: {
+  id: string
+  execution: Execution & { results: AgentResult[] }
+  isExpanded: boolean
+  onToggle: () => void
+}) {
+  const result = execution.results[0]
+  const parsed = result ? safeParseJson(result.editedJson ?? result.outputJson) : null
+  const sections = parsed
+    ? renderAgentOutput(execution.agentId, parsed)
+    : renderParseError(execution.agentId, result?.outputJson ?? '')
+
+  return (
+    <div id={id} style={{ borderBottom: '1px solid rgba(28,28,23,0.1)' }}>
+      {/* ヘッダー（常に表示）*/}
+      <div
+        onClick={onToggle}
+        style={{
+          padding: '16px 40px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          cursor: 'pointer',
+          background: isExpanded ? 'var(--bg2)' : 'transparent',
+          transition: 'background 0.15s',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          {/* 完了アイコン */}
+          <div style={{
+            width: '20px', height: '20px',
+            background: 'var(--ink)',
+            color: 'var(--bg)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: '10px', borderRadius: '2px'
+          }}>✓</div>
+
+          <span style={{
+            fontFamily: 'Unbounded, sans-serif',
+            fontSize: '10px', fontWeight: 700,
+            letterSpacing: '0.15em', textTransform: 'uppercase',
+            color: 'var(--ink)'
+          }}>
+            {execution.agentId} — {AG_LABELS[execution.agentId]}
+          </span>
+
+          {execution.isInherited && (
+            <span style={{
+              fontFamily: 'Sora, sans-serif', fontSize: '9px',
+              color: 'var(--ink3)',
+              background: 'var(--bg2)',
+              border: '1px solid rgba(28,28,23,0.1)',
+              padding: '2px 8px', borderRadius: '99px'
+            }}>
+              前バージョンから引き継ぎ
+            </span>
+          )}
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <span style={{
+            fontFamily: 'Sora, sans-serif', fontSize: '10px',
+            color: 'var(--ink3)'
+          }}>
+            {isExpanded ? '折りたたむ ▴' : '参照する ▾'}
+          </span>
+        </div>
+      </div>
+
+      {/* 展開時のコンテンツ */}
+      {isExpanded && (
+        <div style={{ borderTop: '1px solid rgba(28,28,23,0.1)' }}>
+          <OutputSectionRenderer sections={sections} />
+        </div>
+      )}
+    </div>
+  )
+}
+```
+
+### 5.5 チェックポイントをインラインセクションに変更
+
+```typescript
+// src/components/checkpoint/CheckpointInlineSection.tsx（新規作成）
+// 既存のCheckpointPanel.tsx（モーダル形式）を置き換える
+
+function CheckpointInlineSection({ state, onApprove }) {
+  const [isCollapsed, setIsCollapsed] = useState(false)
+
+  return (
+    <div style={{
+      background: 'rgba(232,196,74,0.06)',
+      borderBottom: '3px solid #E8C44A',  // 上部に黄色ライン
+    }}>
+      {/* ✋ チェックポイントバナー */}
+      <div
+        onClick={() => setIsCollapsed(!isCollapsed)}
+        style={{
+          padding: '16px 40px',
+          display: 'flex', alignItems: 'center',
+          justifyContent: 'space-between',
+          cursor: 'pointer',
+          background: '#E8C44A',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <span style={{ fontSize: '16px' }}>✋</span>
+          <span style={{
+            fontFamily: 'Unbounded, sans-serif',
+            fontSize: '10px', fontWeight: 700,
+            letterSpacing: '0.15em', textTransform: 'uppercase',
+            color: '#4A3800'
+          }}>
+            {state.label} — あなたの判断が必要です
+          </span>
+        </div>
+        <span style={{ color: '#4A3800', fontSize: '12px' }}>
+          {isCollapsed ? '開く ▾' : '閉じる ▴'}
+        </span>
+      </div>
+
+      {/* チェックポイントの内容（折りたたみ可）*/}
+      {!isCollapsed && (
+        <div style={{ padding: '24px 40px 28px' }}>
+          {/* 取れた情報・取れなかった情報・ヒアリング項目・判断ボタン */}
+          {/* 既存のCheckpointPanelの内容をここに移植する */}
+          ...
+          <button
+            onClick={onApprove}
+            style={{
+              background: 'var(--ink)', color: 'var(--bg)',
+              fontFamily: 'Unbounded, sans-serif',
+              fontSize: '9px', fontWeight: 700,
+              letterSpacing: '0.15em', textTransform: 'uppercase',
+              padding: '13px 26px', border: 'none', cursor: 'pointer'
+            }}
+          >
+            この内容で次のフェーズへ →
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+```
+
+### 5.6 既存のモーダル形式のチェックポイントを無効化
+
+```typescript
+// src/app/projects/[id]/page.tsx
+
+// 変更前: チェックポイント到達時にモーダルを表示
+// if (needsCheckpoint) setShowCheckpointModal(true)
+
+// 変更後: モーダルは表示せず、右パネルのインラインセクションで処理
+// checkpointState を setState で管理し、OutputPanel に渡す
+
+const [checkpointState, setCheckpointState] = useState<CheckpointState | null>(null)
+
+// チェックポイント到達時:
+// setCheckpointState({ phase: 2, label: 'フェーズ2確認', ... })
+// → OutputPanelの上部にCheckpointInlineSectionが展開される
+// → モーダルは出さない
+```
+
+### 5.7 実装上の注意点
+
+```
+■ モーダルオーバーレイ（position:fixed）は使わない
+  → 既存の CheckpointPanel.tsx がモーダルならそのまま使わず
+     CheckpointInlineSection に置き換える
+
+■ AGレールの「クリックで参照」はスクロール制御が必要
+  → document.getElementById(`section-${agentId}`)?.scrollIntoView()
+  → 展開状態（expandedAgents）も同時に更新する
+
+■ 実行中のAGはレールでアクティブ表示・右パネルで最上部に固定表示
+  → 完了済みAGとのビジュアル区別を明確にする
+
+■ チェックポイントが「閉じられた」後も過去出力はスクロールでアクセス可能
+  → isCollapsed=true になっても OutputPanel 自体は残っている
+```
+
+---
+
+## 6. 更新後の実装優先順位（全体）
+
+```
+Priority 1（パース修正・最優先）:
+  - src/lib/json-cleaner.ts を作成
+  - 全実行箇所の JSON.parse() を safeParseJson に置き換え
+  - prisma: AgentResult に parseError フィールド追加・db push
+
+Priority 2（出力レンダリング + 過去AG参照を同時実装）:
+  - src/lib/output-renderer.ts を作成（AG-01〜07全マッパー）
+  - src/components/preview/OutputSectionRenderer.tsx を作成
+  - src/components/pipeline/OutputPanel.tsx を作成
+    （全AG出力を時系列逆順・折りたたみ式で表示）
+  - src/components/pipeline/AgentRail.tsx を修正
+    （完了済みAGをクリック可能にする）
+  - チェックポイントをモーダルから CheckpointInlineSection に変更
+
+Priority 3（チェックポイント表示の改善）:
+  - checkpoint-summary.ts を safeParseJson 対応に修正
+  - CheckpointInlineSection で OutputSectionRenderer を使う
+
+Priority 4（パース失敗時のUX改善）:
+  - AGレールに「↺ 再実行」ボタンを追加
+```
