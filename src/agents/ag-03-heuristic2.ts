@@ -1,5 +1,5 @@
 import { BaseAgent } from './base-agent'
-import { AgentId, AgentOutput, ProjectContext } from './types'
+import { AgentId, AgentInput, AgentOutput, ProjectContext } from './types'
 import { loadPrompt } from '@/lib/prompt-loader'
 
 export class Ag03Heuristic2Agent extends BaseAgent {
@@ -9,6 +9,20 @@ export class Ag03Heuristic2Agent extends BaseAgent {
 
   getPrompt(_ctx: ProjectContext): string {
     return loadPrompt('ag-03-heuristic2')
+  }
+
+  async execute(input: AgentInput): Promise<AgentOutput> {
+    const [part1, part2] = await Promise.all([
+      this.callSection(input,
+        'heuristicEvaluations フィールドのみ出力（全競合の評価を含む）。',
+        7000),
+      this.callSection(input,
+        'performanceAudit、performanceSummary、confidence、factBasis、assumptions フィールドのみ出力。heuristicEvaluations は含めない。',
+        5000),
+    ])
+    const merged = { ...part1, ...part2 }
+    this.lastRawText = JSON.stringify(merged)
+    return this.parseOutput(this.lastRawText)
   }
 
   parseOutput(raw: string): AgentOutput {

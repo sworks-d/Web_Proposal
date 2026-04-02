@@ -1,11 +1,25 @@
 import { Ag02BaseAgent } from './ag-02-base'
-import { AgentId, AgentOutput } from './types'
+import { AgentId, AgentInput, AgentOutput } from './types'
 
 export class Ag02JourneyAgent extends Ag02BaseAgent {
   id: AgentId = 'AG-02-JOURNEY'
   primaryId = 'ag-02-journey' as const
   name = 'カスタマージャーニー分析'
   protected modelType = 'quality' as const
+
+  async execute(input: AgentInput): Promise<AgentOutput> {
+    const [part1, part2] = await Promise.all([
+      this.callSection(input,
+        'primaryTarget、journeyScope、phases フィールドのみ出力（phases は全フェーズ必須）。',
+        7000),
+      this.callSection(input,
+        'criticalPhase、criticalBarrier、cvTrigger、keyInsights、confidence、factBasis、assumptions フィールドのみ出力。phases は含めない。',
+        4000),
+    ])
+    const merged = { ...part1, ...part2 }
+    this.lastRawText = JSON.stringify(merged)
+    return this.parseOutput(this.lastRawText)
+  }
 
   parseOutput(raw: string): AgentOutput {
     try {

@@ -1,11 +1,25 @@
 import { Ag02BaseAgent } from './ag-02-base'
-import { AgentId, AgentOutput } from './types'
+import { AgentId, AgentInput, AgentOutput } from './types'
 
 export class Ag02StpAgent extends Ag02BaseAgent {
   id: AgentId = 'AG-02-STP'
   primaryId = 'ag-02-stp' as const
   name = 'STPセグメンテーション分析'
   protected modelType = 'quality' as const
+
+  async execute(input: AgentInput): Promise<AgentOutput> {
+    const [part1, part2] = await Promise.all([
+      this.callSection(input,
+        'segmentation フィールドのみ出力（配列、最大4件）。他のフィールドは含めない。',
+        6000),
+      this.callSection(input,
+        'targeting、positioning、positioningMap、designImplication、confidence、factBasis、assumptions フィールドのみ出力。segmentation は含めない。',
+        6000),
+    ])
+    const merged = { ...part1, ...part2 }
+    this.lastRawText = JSON.stringify(merged)
+    return this.parseOutput(this.lastRawText)
+  }
 
   parseOutput(raw: string): AgentOutput {
     try {

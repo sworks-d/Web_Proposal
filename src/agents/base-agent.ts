@@ -1,5 +1,6 @@
 import { AgentId, AgentInput, AgentOutput, ProjectContext } from './types'
 import { callClaude, ModelType } from '@/lib/anthropic-client'
+import { safeParseJson } from '@/lib/json-cleaner'
 
 const AG_MAX_TOKENS: Record<string, number> = {
   'AG-01': 4096,
@@ -78,6 +79,23 @@ export abstract class BaseAgent {
       lines.push(`\n## 追加指示\n${input.userInstruction}`)
     }
     return lines.join('\n')
+  }
+
+  /**
+   * 出力が大きいAGで使う分割実行ヘルパー。
+   * 各セクション指示で個別にClaudeを呼び出し、JSONをマージして返す。
+   * sections を Promise.all で並列実行することも可能。
+   */
+  protected async callSection(
+    input: AgentInput,
+    sectionInstruction: string,
+    maxTokens = 6000
+  ): Promise<Record<string, unknown>> {
+    const system = this.getPrompt(input.projectContext)
+    const user = this.buildUserMessage(input) +
+      `\n\n---\n【出力指示（このリクエスト専用）】\n${sectionInstruction}\n指定フィールドのみのJSONを出力すること。説明・前置き・コードフェンス不要。`
+    const raw = await callClaude(system, user, this.modelType, maxTokens)
+    return (safeParseJson(raw) as Record<string, unknown>) ?? {}
   }
 
   protected parseJSON<T>(text: string): T {

@@ -1,5 +1,5 @@
 import { BaseAgent } from './base-agent'
-import { AgentId, AgentOutput, ProjectContext } from './types'
+import { AgentId, AgentInput, AgentOutput, ProjectContext } from './types'
 import { loadPrompt } from '@/lib/prompt-loader'
 
 export class Ag02MergeAgent extends BaseAgent {
@@ -9,6 +9,20 @@ export class Ag02MergeAgent extends BaseAgent {
 
   getPrompt(_ctx: ProjectContext): string {
     return loadPrompt('ag-02-merge')
+  }
+
+  async execute(input: AgentInput): Promise<AgentOutput> {
+    const [part1, part2] = await Promise.all([
+      this.callSection(input,
+        'primaryTarget、targetContextualState、consolidatedJourney、topPainRelievers フィールドのみ出力。',
+        6000),
+      this.callSection(input,
+        'siteDesignDirectives、siteDesignPrinciples、contradictions、confidence、factBasis、assumptions フィールドのみ出力。',
+        6000),
+    ])
+    const merged = { ...part1, ...part2 }
+    this.lastRawText = JSON.stringify(merged)
+    return this.parseOutput(this.lastRawText)
   }
 
   parseOutput(raw: string): AgentOutput {
