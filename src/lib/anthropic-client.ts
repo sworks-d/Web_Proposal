@@ -13,11 +13,13 @@ export function getModel(type: ModelType = 'fast'): string {
 export async function callClaude(
   system: string,
   user: string,
-  modelType: ModelType = 'fast'
+  modelType: ModelType = 'fast',
+  maxTokens?: number
 ): Promise<string> {
+  const defaultMax = modelType === 'quality' ? 8192 : 4096
   const res = await anthropic.messages.create({
     model: getModel(modelType),
-    max_tokens: 4096,
+    max_tokens: maxTokens ?? defaultMax,
     system,
     messages: [{ role: 'user', content: user }],
   })

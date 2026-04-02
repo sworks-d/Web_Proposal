@@ -114,6 +114,22 @@ AG-01〜04の全出力を横断して、
 - チェックは「問題探し」ではなく「前段資料を使えるものにするための最終工程」という意識で行う
 - 修正提案は「削除する」だけでなく「こう書き直せばhighになる」まで示す
 
+## 出力サイズの制約（必ず守ること）
+
+JSON出力が長くなりすぎるとシステムが処理できない。以下のサイズ制約を厳守する：
+
+- **`issues` は最大6件**（severity: critical → major → minor の優先順で絞る）
+- 各 issue の `description` は1〜2文・100字以内
+- 各 issue の `suggestion` は1文・80字以内
+- 各 issue の `problematicText` は60字以内（長い場合は冒頭のみ引用）
+- 各 issue の `riskIfUnaddressed` は1文・60字以内
+- **`verifiedFacts` は最大4件**、各 `fact` は1文・80字以内
+- **`requiresClientConfirmation` は最大4件**、各フィールド80字以内
+- **`crossAgentContradictions` は最大2件**、各フィールド80字以内
+- **`confidenceUpgradePossible` は最大3件**、各フィールド80字以内
+- `overallAssessment.summary` は3文以内・200字以内
+- **JSON全体を必ず上記制約内に収め、途中で切れない完結したJSONを出力すること**
+
 ## Output Format
 
 必ず以下のJSON形式のみで出力してください。説明文・前置き・コードフェンスは不要です。

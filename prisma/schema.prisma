@@ -55,6 +55,7 @@ model ProposalVersion {
   completedAt    DateTime?
   executions     Execution[]
   slides         ProposalSlide[]
+  feedbacks      ProposalFeedback[]
 }
 
 // ── 各AG実行 ──
@@ -73,14 +74,16 @@ model Execution {
 }
 
 model AgentResult {
-  id          String    @id @default(cuid())
-  executionId String
-  execution   Execution @relation(fields: [executionId], references: [id])
-  agentId     String
-  outputJson  String
-  editedJson  String?
-  approvedAt  DateTime?
-  createdAt   DateTime  @default(now())
+  id                String    @id @default(cuid())
+  executionId       String
+  execution         Execution @relation(fields: [executionId], references: [id])
+  agentId           String
+  outputJson        String
+  editedJson        String?
+  approvedAt        DateTime?
+  parseError        Boolean   @default(false)
+  parseErrorMessage String?
+  createdAt         DateTime  @default(now())
 }
 
 // ── 企画書スライド（AG-07出力から生成）──
@@ -98,4 +101,32 @@ model ProposalSlide {
   layoutHint  String?
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @updatedAt
+}
+
+// ── フィードバック ──
+model ProposalFeedback {
+  id              String          @id @default(cuid())
+  versionId       String
+  version         ProposalVersion @relation(fields: [versionId], references: [id])
+  overallScore    Int
+  weakestAgent    String
+  competitorScore Int
+  targetScore     Int
+  storyUsability  String          // that_usable | needs_edit | rebuild
+  bestChapter     String
+  freeComment     String?
+  autoFlagAgents  String          @default("[]")  // JSON array of agent IDs to auto-flag
+  processed       Boolean         @default(false)
+  submittedAt     DateTime        @default(now())
+}
+
+// ── プロンプトバージョン管理 ──
+model PromptVersion {
+  id          String   @id @default(cuid())
+  agentId     String
+  version     Int
+  content     String
+  changeNote  String?
+  cdFeedback  String?
+  appliedAt   DateTime @default(now())
 }

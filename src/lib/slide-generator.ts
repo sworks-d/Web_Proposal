@@ -1,4 +1,5 @@
 import { PrismaClient } from '@prisma/client'
+import { safeParseJson } from '@/lib/json-cleaner'
 
 const prisma = new PrismaClient()
 
@@ -42,7 +43,8 @@ export async function generateSlides(versionId: string) {
   const ag07Result = version.executions[0]?.results[0]
   if (!ag07Result) throw new Error('AG-07 result not found')
 
-  const story: StoryOutput = JSON.parse(ag07Result.editedJson ?? ag07Result.outputJson)
+  const story: StoryOutput = safeParseJson(ag07Result.editedJson ?? ag07Result.outputJson) ?? {}
+
   type SlideData = {
     versionId: string
     slideNumber: number

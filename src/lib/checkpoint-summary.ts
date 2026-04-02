@@ -1,4 +1,5 @@
 import { AgentOutput } from '@/agents/types'
+import { safeParseJson } from '@/lib/json-cleaner'
 
 export interface GotInfoItem {
   confidence: 'high' | 'medium' | 'low'

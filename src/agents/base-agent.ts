@@ -3,12 +3,30 @@ import { callClaude, ModelType } from '@/lib/anthropic-client'
 
 const AG_MAX_TOKENS: Record<string, number> = {
   'AG-01': 4096,
-  'AG-02': 16384,
-  'AG-03': 16384,
-  'AG-04': 16384,
+  // AG-02系
+  'AG-02':          16384,
+  'AG-02-STP':      4096,
+  'AG-02-JOURNEY':  4096,
+  'AG-02-VPC':      4096,
+  'AG-02-MERGE':    4096,
+  // AG-03系
+  'AG-03':          16384,
+  'AG-03-HEURISTIC':  8192,
+  'AG-03-HEURISTIC2': 4096,
+  'AG-03-GAP':        4096,
+  'AG-03-DATA':       4096,
+  'AG-03-MERGE':      4096,
+  // AG-04系
+  'AG-04':          16384,
+  'AG-04-MAIN':     8192,
+  'AG-04-MERGE':    4096,
+  // AG-05〜07
   'AG-05': 16384,
   'AG-06': 16384,
   'AG-07': 16384,
+  'AG-07A': 8192,
+  'AG-07B': 4096,
+  'AG-07C': 16384,
 }
 
 export abstract class BaseAgent {

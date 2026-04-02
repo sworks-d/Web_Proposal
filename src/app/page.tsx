@@ -60,10 +60,22 @@ export default function HomePage() {
   const [briefText, setBriefText] = useState('')
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
 
   useEffect(() => {
     fetch('/api/projects').then(r => r.json()).then(setProjects).catch(() => {})
   }, [])
+
+  const handleDelete = async (projectId: string, name: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (!confirm(`「${name}」を削除しますか？\nこの操作は取り消せません。`)) return
+    setDeletingId(projectId)
+    try {
+      await fetch(`/api/projects/${projectId}`, { method: 'DELETE' })
+      setProjects(prev => prev.filter(p => p.id !== projectId))
+    } catch {}
+    setDeletingId(null)
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -235,7 +247,24 @@ export default function HomePage() {
                 <span style={{ fontFamily: 'var(--font-d)', fontSize: '9px', fontWeight: 400, color: 'var(--ink4)', letterSpacing: '0.1em' }}>
                   {String(idx + 1).padStart(3, '0')}
                 </span>
-                <StatusPill status={cardStatus === 'none' ? 'done' : cardStatus} />
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <StatusPill status={cardStatus === 'none' ? 'done' : cardStatus} />
+                  <button
+                    onClick={e => handleDelete(p.id, p.client.name, e)}
+                    disabled={deletingId === p.id}
+                    title="削除"
+                    style={{
+                      background: 'none', border: 'none', cursor: 'pointer',
+                      color: 'var(--ink4)', fontSize: '13px', lineHeight: 1,
+                      padding: '2px 4px', borderRadius: '2px',
+                      opacity: deletingId === p.id ? 0.4 : 1,
+                    }}
+                    onMouseEnter={e => (e.currentTarget.style.color = 'var(--red)')}
+                    onMouseLeave={e => (e.currentTarget.style.color = 'var(--ink4)')}
+                  >
+                    {deletingId === p.id ? '…' : '✕'}
+                  </button>
+                </div>
               </div>
               <div style={{ fontFamily: 'var(--font-d)', fontSize: '19px', fontWeight: 900, lineHeight: 1.1, letterSpacing: '-0.02em', textTransform: 'uppercase', marginBottom: '6px' }}>
                 {p.client.name}
