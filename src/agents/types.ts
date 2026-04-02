@@ -1,6 +1,10 @@
 export type AgentId =
   | 'AG-01' | 'AG-02' | 'AG-03'
   | 'AG-04' | 'AG-05' | 'AG-06' | 'AG-07'
+  | 'AG-02-JOURNEY' | 'AG-02-STP' | 'AG-02-VPC' | 'AG-02-MERGE'
+  | 'AG-03-DATA' | 'AG-03-GAP' | 'AG-03-HEURISTIC' | 'AG-03-HEURISTIC2' | 'AG-03-MERGE'
+  | 'AG-04-MAIN' | 'AG-04-MERGE'
+  | 'AG-07A' | 'AG-07B' | 'AG-07C'
 
 export type ConfidenceLevel = 'high' | 'medium' | 'low'
 export type VizType = 'chart' | 'mermaid' | 'matrix' | 'positioning'
@@ -12,6 +16,7 @@ export interface ProjectContext {
   briefText: string
   industryType: string
   knownConstraints?: string
+  cdNotes?: Record<string, string>  // AGId別にCDが追加したヒアリング情報
 }
 
 export interface Section {
@@ -61,6 +66,7 @@ export type SSEEvent =
 export type PrimaryAgentId =
   | 'ag-02-recruit' | 'ag-02-brand' | 'ag-02-ec'
   | 'ag-02-corp'   | 'ag-02-camp'  | 'ag-02-btob' | 'ag-02-general'
+  | 'ag-02-journey' | 'ag-02-stp'  | 'ag-02-vpc'  | 'ag-02-merge'
 
 export type SubAgentId =
   | 'ag-02-sub-beauty' | 'ag-02-sub-food'    | 'ag-02-sub-finance'
