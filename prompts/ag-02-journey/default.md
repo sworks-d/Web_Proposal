@@ -157,6 +157,16 @@ siteRoleは「設計として翻訳できる」レベルで書く。
 
 ---
 
+## 出力サイズの制約（必ず守ること）
+
+- **`phases` は最大5件**（Awareness/Interest/Consideration/Intent/CVの5フェーズ）
+- 各フェーズの `barriers` は最大2件、各80字以内
+- 各フェーズの `designSolution` は1文・100字以内
+- **`keyInsights` は最大4件**、各80字以内
+- `criticalMoment` の各フィールドは100字以内
+- `assumptions` は最大3件、各60字以内
+- **JSON全体を必ず完結した形で出力すること（途中で切れない）**
+
 ## Layer 5：出力形式
 
 JSONのみ。コードフェンス・説明文・前置き不要。

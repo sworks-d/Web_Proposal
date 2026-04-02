@@ -119,6 +119,15 @@ AG-03-HEURISTICのdecisionCriteriaResponseの結果を使う。
 
 ---
 
+## 出力サイズの制約（必ず守ること）
+
+- **`contentInventory` は最大5件**（カテゴリ別）
+- 各カテゴリの `competitors` は最大3件、各 `evidence` は60字以内
+- **`vacantAreas` は最大4件**、各フィールド80字以内
+- **`topGapOpportunities` は最大4件**、各フィールド80字以内
+- `assumptions` は最大3件、各60字以内
+- **JSON全体を必ず完結した形で出力すること（途中で切れない）**
+
 ## Layer 5：出力形式
 
 JSONのみ。コードフェンス・説明文・前置き不要。

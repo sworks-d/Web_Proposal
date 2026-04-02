@@ -82,6 +82,17 @@ AG-03-HEURISTICとこのAGの評価を合算して：
 
 ---
 
+## 出力サイズの制約（必ず守ること）
+
+- **`heuristicEvaluations` は最大3件**
+- 各評価の各スコア `detail` は60字以内
+- 各評価の `quickWins` は最大2件、各80字以内
+- **`performanceAudit` は最大3件**
+- 各監査の `opportunities` は最大2件、各80字以内
+- `performanceSummary` の各フィールドは80字以内
+- `assumptions` は最大3件、各60字以内
+- **JSON全体を必ず完結した形で出力すること（途中で切れない）**
+
 ## Layer 5：出力形式
 
 JSONのみ。コードフェンス・説明文・前置き不要。

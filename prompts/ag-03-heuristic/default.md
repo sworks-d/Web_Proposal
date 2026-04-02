@@ -107,6 +107,18 @@ missingの軸にはclientOpportunityを必ず付ける。
 
 ---
 
+## 出力サイズの制約（必ず守ること）
+
+- **`evaluations` は最大2件**（上位2社のみ）
+- 各評価の `tasksExecuted` は最大3件、各60字以内
+- 各評価の `heuristicScores` の各項目 `detail` は80字以内
+- 各評価の `strengths` は最大2件、各 `what`/`adoption` は80字以内
+- 各評価の `weaknesses` は最大2件、各80字以内
+- `crossCompetitorInsights` は最大3件、各80字以内
+- `strategicConclusion` は1文・100字以内
+- `assumptions` は最大3件、各60字以内
+- **JSON全体を必ず完結した形で出力すること（途中で切れない）**
+
 ## Layer 5：出力形式
 
 JSONのみ。コードフェンス・説明文・前置き不要。

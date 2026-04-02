@@ -150,6 +150,17 @@ forAG06：
 
 ---
 
+## 出力サイズの制約（必ず守ること）
+
+- `primaryTarget` は1文・100字以内
+- `targetContextualState` は1文・100字以内
+- **`consolidatedJourney` の各フィールドは80字以内**
+- **`siteDesignDirectives` は最大5件**、各フィールド80字以内
+- **`siteDesignPrinciples` は最大4件**、各フィールド80字以内
+- `contradictions` は最大2件、各フィールド80字以内
+- `assumptions` は最大3件、各60字以内
+- **JSON全体を必ず完結した形で出力すること（途中で切れない）**
+
 ## Layer 5：出力形式
 
 JSONのみ。コードフェンス・説明文・前置き不要。

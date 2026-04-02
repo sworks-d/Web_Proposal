@@ -160,6 +160,18 @@ Gain Creatorの設計型：
 
 ---
 
+## 出力サイズの制約（必ず守ること）
+
+- **`customerProfile.jobs.functional` は最大3件**、各80字以内
+- **`customerProfile.gains` は最大4件**、各80字以内
+- **`customerProfile.pains` は最大4件**、各80字以内
+- **`gainCreators` は最大3件**、各フィールド80字以内
+- **`painRelievers` は最大3件**、各フィールド80字以内
+- `valueProposition.coreStatement` は200字以内
+- `fit.fitReason` は100字以内
+- `assumptions` は最大3件、各60字以内
+- **JSON全体を必ず完結した形で出力すること（途中で切れない）**
+
 ## Layer 5：出力形式
 
 JSONのみ。コードフェンス・説明文・前置き不要。
