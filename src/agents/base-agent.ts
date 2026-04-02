@@ -5,21 +5,21 @@ const AG_MAX_TOKENS: Record<string, number> = {
   'AG-01': 4096,
   // AG-02系
   'AG-02':          16384,
-  'AG-02-STP':      4096,
-  'AG-02-JOURNEY':  4096,
-  'AG-02-VPC':      4096,
-  'AG-02-MERGE':    4096,
+  'AG-02-STP':      8192,
+  'AG-02-JOURNEY':  8192,
+  'AG-02-VPC':      8192,
+  'AG-02-MERGE':    8192,
   // AG-03系
   'AG-03':          16384,
   'AG-03-HEURISTIC':  8192,
-  'AG-03-HEURISTIC2': 4096,
-  'AG-03-GAP':        4096,
-  'AG-03-DATA':       4096,
-  'AG-03-MERGE':      4096,
+  'AG-03-HEURISTIC2': 8192,
+  'AG-03-GAP':        8192,
+  'AG-03-DATA':       8192,
+  'AG-03-MERGE':      8192,
   // AG-04系
   'AG-04':          16384,
   'AG-04-MAIN':     8192,
-  'AG-04-MERGE':    4096,
+  'AG-04-MERGE':    8192,
   // AG-05〜07
   'AG-05': 8192,
   'AG-05': 16384,
@@ -82,9 +82,9 @@ export abstract class BaseAgent {
 
   protected parseJSON<T>(text: string): T {
     const cleaned = text
-      .replace(/^```json\s*/m, '')
-      .replace(/^```\s*/m, '')
-      .replace(/```\s*$/m, '')
+      .replace(/^\s*```json\s*/m, '')
+      .replace(/^\s*```\s*/m, '')
+      .replace(/\s*```\s*$/m, '')
       .trim()
     return JSON.parse(cleaned) as T
   }
