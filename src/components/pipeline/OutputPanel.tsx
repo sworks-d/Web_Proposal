@@ -1,9 +1,27 @@
 'use client'
+import { useState, useEffect, useRef } from 'react'
 import { safeParseJson } from '@/lib/json-cleaner'
 import { renderAgentOutput, renderParseError } from '@/lib/output-renderer'
 import { OutputSectionRenderer } from '@/components/preview/OutputSectionRenderer'
 import { GotInfoItem, MissingInfoItem } from '@/lib/checkpoint-summary'
 import { CheckpointInlineSection } from '@/components/checkpoint/CheckpointInlineSection'
+
+function ElapsedTimer({ running }: { running: boolean }) {
+  const [secs, setSecs] = useState(0)
+  useEffect(() => {
+    if (!running) { setSecs(0); return }
+    const t = setInterval(() => setSecs(s => s + 1), 1000)
+    return () => clearInterval(t)
+  }, [running])
+  if (!running) return null
+  const m = Math.floor(secs / 60)
+  const s = secs % 60
+  return (
+    <span style={{ fontFamily: 'var(--font-d)', fontSize: '9px', color: 'var(--ink3)', letterSpacing: '0.1em' }}>
+      {m > 0 ? `${m}m ` : ''}{s}s
+    </span>
+  )
+}
 
 export interface VersionExecution {
   id: string
@@ -13,16 +31,36 @@ export interface VersionExecution {
 }
 
 const AG_LABELS: Record<string, string> = {
-  'AG-01': 'インテーク担当',
-  'AG-02': '市場・業界分析',
-  'AG-03': '競合・ポジション分析',
-  'AG-04': '課題構造化',
-  'AG-05': 'ファクトチェック',
-  'AG-06': '設計草案',
-  'AG-07': '提案書草案',
+  'AG-01':            'インテーク担当',
+  'AG-02':            '市場骨格分析',
+  'AG-02-STP':        'STPセグメンテーション',
+  'AG-02-JOURNEY':    'カスタマージャーニー',
+  'AG-02-VPC':        'バリュープロポジション',
+  'AG-02-MERGE':      '市場分析統合',
+  'AG-03':            '競合特定・ポジション',
+  'AG-03-HEURISTIC':  'ヒューリスティック評価（上位2社）',
+  'AG-03-HEURISTIC2': 'ヒューリスティック評価（残競合）',
+  'AG-03-GAP':        'コンテンツギャップ',
+  'AG-03-DATA':       'GA4・SC分析',
+  'AG-03-MERGE':      '競合分析統合',
+  'AG-04-MAIN':       '5Whys・HMW',
+  'AG-04':            'インサイト・JTBD',
+  'AG-04-MERGE':      '課題定義統合',
+  'AG-05':            'ファクトチェック',
+  'AG-06':            '設計草案',
+  'AG-07A':           '設計根拠ライター',
+  'AG-07B':           'リファレンス戦略',
+  'AG-07C':           '提案書草案',
 }
 
-const AGENT_ORDER = ['AG-01', 'AG-02', 'AG-03', 'AG-04', 'AG-05', 'AG-06', 'AG-07']
+const AGENT_ORDER = [
+  'AG-01',
+  'AG-02', 'AG-02-STP', 'AG-02-JOURNEY', 'AG-02-VPC', 'AG-02-MERGE',
+  'AG-03', 'AG-03-HEURISTIC', 'AG-03-HEURISTIC2', 'AG-03-GAP', 'AG-03-DATA', 'AG-03-MERGE',
+  'AG-04-MAIN', 'AG-04', 'AG-04-MERGE',
+  'AG-05', 'AG-06',
+  'AG-07A', 'AG-07B', 'AG-07C',
+]
 
 interface CheckpointState {
   versionId: string
@@ -35,6 +73,7 @@ interface OutputPanelProps {
   versionExecutions: VersionExecution[]
   currentAG: string | null
   appStatus: string
+  statusMessages: string[]
   selectedAgentId: string | null
   onAgSelect: (agentId: string | null) => void
   checkpointState: CheckpointState | null
@@ -50,11 +89,15 @@ interface OutputPanelProps {
 }
 
 export function OutputPanel({
-  versionExecutions, currentAG, appStatus, selectedAgentId, onAgSelect,
+  versionExecutions, currentAG, appStatus, statusMessages, selectedAgentId, onAgSelect,
   checkpointState, primaryOptions, subOptions,
   selectedPrimary, selectedSub, onPrimaryChange, onSubChange,
   cdNotes, onCdNoteChange, onCheckpointConfirm,
 }: OutputPanelProps) {
+  const msgRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    msgRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [statusMessages])
 
   // Completed executions sorted newest first (AG-07 → AG-01)
   const completedExecutions = [...AGENT_ORDER]
@@ -87,19 +130,57 @@ export function OutputPanel({
       )}
 
       {/* Currently running AG indicator */}
-      {currentAG && appStatus === 'running' && (
-        <div style={{ padding: '18px 40px', background: 'var(--bg2)', borderBottom: '1px solid var(--line)', display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
-          <div style={{ width: '20px', height: '20px', background: 'var(--red)', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '2px', flexShrink: 0 }}>
-            <span style={{ display: 'flex', gap: '2px' }}>
-              {[0, 0.2, 0.4].map((d, i) => (
-                <span key={i} style={{ width: '3px', height: '3px', borderRadius: '50%', background: '#fff', animation: `td 1.4s ease-in-out ${d}s infinite`, display: 'inline-block' }} />
+      {appStatus === 'running' && (
+        <div style={{ background: 'var(--bg2)', borderBottom: '1px solid var(--line)', borderLeft: '2px solid var(--red)', flexShrink: 0 }}>
+          {/* Header */}
+          <div style={{ padding: '14px 40px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div style={{ width: '20px', height: '20px', background: 'var(--red)', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '2px', flexShrink: 0 }}>
+              <span style={{ display: 'flex', gap: '2px' }}>
+                {[0, 0.2, 0.4].map((d, i) => (
+                  <span key={i} style={{ width: '3px', height: '3px', borderRadius: '50%', background: '#fff', animation: `td 1.4s ease-in-out ${d}s infinite`, display: 'inline-block' }} />
+                ))}
+              </span>
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontFamily: 'var(--font-d)', fontSize: '9px', letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--red)' }}>
+                {currentAG ?? 'パイプライン'} — 実行中
+              </div>
+              <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--ink)' }}>
+                {currentAG ? (AG_LABELS[currentAG] ?? currentAG) : 'エージェント準備中...'}
+              </div>
+            </div>
+            <ElapsedTimer running={appStatus === 'running'} />
+          </div>
+          {/* Status log */}
+          {statusMessages.length > 0 && (
+            <div style={{
+              margin: '0 40px 14px',
+              padding: '10px 14px',
+              background: 'var(--bg)',
+              border: '1px solid var(--line)',
+              borderRadius: '2px',
+              maxHeight: '120px',
+              overflowY: 'auto',
+            }}>
+              {statusMessages.map((msg, i) => (
+                <div key={i} style={{
+                  fontFamily: 'var(--font-c)',
+                  fontSize: '11px',
+                  color: i === statusMessages.length - 1 ? 'var(--ink)' : 'var(--ink3)',
+                  lineHeight: 1.7,
+                  display: 'flex',
+                  alignItems: 'baseline',
+                  gap: '6px',
+                }}>
+                  <span style={{ color: 'var(--red)', flexShrink: 0, fontSize: '9px' }}>
+                    {i === statusMessages.length - 1 ? '▶' : '✓'}
+                  </span>
+                  {msg}
+                </div>
               ))}
-            </span>
-          </div>
-          <div>
-            <div style={{ fontFamily: 'var(--font-d)', fontSize: '9px', letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--ink3)' }}>{currentAG}</div>
-            <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--ink)' }}>{AG_LABELS[currentAG] ?? ''} — 実行中...</div>
-          </div>
+              <div ref={msgRef} />
+            </div>
+          )}
         </div>
       )}
 

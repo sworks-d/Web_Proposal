@@ -559,6 +559,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
               versionExecutions={versionExecutions}
               currentAG={currentAG}
               appStatus={appStatus}
+              statusMessages={statusMessages}
               selectedAgentId={selectedAGId}
               onAgSelect={agId => setSelectedAGId(prev => prev === agId ? null : agId)}
               checkpointState={checkpointState}
