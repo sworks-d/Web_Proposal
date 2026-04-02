@@ -68,7 +68,10 @@ export async function runAgentStep(
       agent = ag02
       break
     }
-    case 'AG-02-MERGE': agent = new Ag02MergeAgent(); break
+    case 'AG-02-JOURNEY': agent = new Ag02JourneyAgent(); break
+    case 'AG-02-STP':     agent = new Ag02StpAgent(); break
+    case 'AG-02-VPC':     agent = new Ag02VpcAgent(); break
+    case 'AG-02-MERGE':   agent = new Ag02MergeAgent(); break
     case 'AG-03': agent = new Ag03CompetitorAgent(); break
     case 'AG-03-DATA': agent = new Ag03DataAgent(); break
     case 'AG-03-GAP': agent = new Ag03GapAgent(); break
