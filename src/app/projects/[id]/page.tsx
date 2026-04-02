@@ -523,6 +523,12 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
                   スライドプレビュー
                 </button>
                 <button
+                  onClick={() => currentVersionId && window.open(`/api/versions/${currentVersionId}/pdf`, '_blank')}
+                  style={{ background: 'var(--red)', color: '#fff', fontFamily: 'var(--font-d)', fontSize: '8px', fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', padding: '8px 14px', border: 'none', cursor: 'pointer', borderRadius: '2px' }}
+                >
+                  ↓ PDF
+                </button>
+                <button
                   onClick={handleDownloadClick}
                   style={{ background: 'transparent', border: '1px solid var(--line2)', color: 'var(--ink2)', fontFamily: 'var(--font-d)', fontSize: '8px', fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', padding: '8px 14px', cursor: 'pointer', borderRadius: '2px' }}
                 >
