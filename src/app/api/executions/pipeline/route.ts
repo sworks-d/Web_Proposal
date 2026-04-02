@@ -4,6 +4,8 @@ import { runAgentStep, setVersionStatus } from '@/lib/pipeline'
 import { getOrCreateActiveVersion } from '@/lib/version-manager'
 import { ProjectContext, PipelineConfig, AgentOutput } from '@/agents/types'
 
+export const maxDuration = 600 // 10分
+
 const prisma = new PrismaClient()
 
 export async function POST(req: NextRequest) {

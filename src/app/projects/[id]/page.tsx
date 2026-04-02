@@ -1,10 +1,18 @@
 'use client'
 import { useState, useEffect, use } from 'react'
 import { AgentOutput, PipelineConfig, Section } from '@/agents/types'
-import { buildCheckpointSummary, GotInfoItem, MissingInfoItem } from '@/lib/checkpoint-summary'
+import { buildCheckpointSummary } from '@/lib/checkpoint-summary'
 import Ticker from '@/components/layout/Ticker'
 import NavBar from '@/components/layout/NavBar'
 import TableOfContents from '@/components/proposal/TableOfContents'
+import { FeedbackModal } from '@/components/feedback/FeedbackModal'
+import { OutputPanel, VersionExecution } from '@/components/pipeline/OutputPanel'
+
+interface FullVersion {
+  id: string
+  status: string
+  executions: VersionExecution[]
+}
 
 interface Project {
   id: string
@@ -25,18 +33,31 @@ type AppStatus = 'idle' | 'running' | 'checkpoint' | 'error' | 'completed'
 type CheckpointState = {
   versionId: string
   phase: 1 | 2 | 3 | 4
-  outputs: AgentOutput[]
-  summary: { gotInfo: GotInfoItem[]; missingInfo: MissingInfoItem[] }
+  gotInfo: { confidence: 'high' | 'medium' | 'low'; title: string; summary: string; source: string }[]
+  missingInfo: { item: string; reason: string; confirmMethod: string }[]
 } | null
 
 const AG_LIST = [
-  { id: 'AG-01', name: 'インテーク担当' },
-  { id: 'AG-02', name: '市場・業界分析' },
-  { id: 'AG-03', name: '競合・ポジション分析' },
-  { id: 'AG-04', name: '課題構造化' },
-  { id: 'AG-05', name: 'ファクトチェック' },
-  { id: 'AG-06', name: '設計草案' },
-  { id: 'AG-07', name: '提案書草案' },
+  { id: 'AG-01',            name: 'インテーク担当',             badge: '01' },
+  { id: 'AG-02',            name: '市場骨格分析',               badge: '02' },
+  { id: 'AG-02-STP',        name: 'STPセグメンテーション',      badge: 'STP' },
+  { id: 'AG-02-JOURNEY',    name: 'カスタマージャーニー',       badge: 'JNY' },
+  { id: 'AG-02-VPC',        name: 'バリュープロポジション',     badge: 'VPC' },
+  { id: 'AG-02-MERGE',      name: '市場分析統合',               badge: 'M02' },
+  { id: 'AG-03',            name: '競合特定・ポジション',       badge: '03' },
+  { id: 'AG-03-HEURISTIC',  name: 'ヒューリスティック（上位2社）', badge: 'H1' },
+  { id: 'AG-03-HEURISTIC2', name: 'ヒューリスティック（残競合）', badge: 'H2' },
+  { id: 'AG-03-GAP',        name: 'コンテンツギャップ',         badge: 'GAP' },
+  { id: 'AG-03-DATA',       name: 'GA4・SC分析',                badge: 'DAT' },
+  { id: 'AG-03-MERGE',      name: '競合分析統合',               badge: 'M03' },
+  { id: 'AG-04-MAIN',       name: '5Whys・HMW',                 badge: '4M' },
+  { id: 'AG-04',            name: 'インサイト・JTBD',           badge: '04' },
+  { id: 'AG-04-MERGE',      name: '課題定義統合',               badge: 'M04' },
+  { id: 'AG-05',            name: 'ファクトチェック',           badge: '05' },
+  { id: 'AG-06',            name: '設計草案',                   badge: '06' },
+  { id: 'AG-07A',           name: '設計根拠ライター',           badge: '7A' },
+  { id: 'AG-07B',           name: 'リファレンス戦略',           badge: '7B' },
+  { id: 'AG-07C',           name: '提案書草案',                 badge: '7C' },
 ]
 
 const PHASE_LABELS = ['インテーク', '市場分析', '競合分析', '統合・FC', '設計・草案']
@@ -77,6 +98,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
   const [project, setProject] = useState<Project | null>(null)
   const [versions, setVersions] = useState<VersionSummary[]>([])
   const [currentVersionId, setCurrentVersionId] = useState<string | null>(null)
+  const [version, setVersion] = useState<FullVersion | null>(null)
   const [appStatus, setAppStatus] = useState<AppStatus>('idle')
   const [currentAG, setCurrentAG] = useState<string | null>(null)
   const [completedAGs, setCompletedAGs] = useState<string[]>([])
@@ -84,7 +106,6 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
   const [checkpointState, setCheckpointState] = useState<CheckpointState>(null)
   const [statusMessages, setStatusMessages] = useState<string[]>([])
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
-  const [showCheckpointModal, setShowCheckpointModal] = useState(false)
   const [selectedPrimary, setSelectedPrimary] = useState('ag-02-recruit')
   const [selectedSub, setSelectedSub] = useState<string[]>([])
   const [currentPhase, setCurrentPhase] = useState(0)
@@ -92,17 +113,65 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
   const [cdNotes, setCdNotes] = useState<Record<string, string>>({})
   const [showVersionDropdown, setShowVersionDropdown] = useState(false)
   const [showSlides, setShowSlides] = useState(false)
+  const [showFeedback, setShowFeedback] = useState(false)
+  const [feedbackDone, setFeedbackDone] = useState(false)
 
   useEffect(() => {
     fetch(`/api/projects/${id}`).then(r => r.json()).then(setProject).catch(() => {})
     fetch(`/api/projects/${id}/versions`).then(r => r.json()).then((vs: VersionSummary[]) => {
       setVersions(vs)
       const active = vs.find(v => ['RUNNING', 'CHECKPOINT', 'DRAFT'].includes(v.status)) ?? vs[vs.length - 1]
-      if (active) setCurrentVersionId(active.id)
+      if (active) {
+        setCurrentVersionId(active.id)
+        if (active.status === 'CHECKPOINT') setAppStatus('checkpoint')
+        else if (active.status === 'ERROR') { setAppStatus('error'); setErrorMessage('前回の実行でエラーが発生しました。') }
+        else if (active.status === 'COMPLETED') setAppStatus('completed')
+      }
     }).catch(() => {})
   }, [id])
 
+  // Load version data (executions + results) when currentVersionId changes
+  useEffect(() => {
+    if (!currentVersionId) return
+    fetch(`/api/versions/${currentVersionId}`)
+      .then(r => r.ok ? r.json() : null)
+      .then((v: FullVersion | null) => { if (v) setVersion(v) })
+      .catch(() => {})
+  }, [currentVersionId])
+
+  const refreshVersion = () => {
+    if (!currentVersionId) return
+    fetch(`/api/versions/${currentVersionId}`)
+      .then(r => r.ok ? r.json() : null)
+      .then((v: FullVersion | null) => { if (v) setVersion(v) })
+      .catch(() => {})
+  }
+
+  // Auto-scroll right panel when selectedAGId changes
+  useEffect(() => {
+    if (!selectedAGId) return
+    setTimeout(() => {
+      document.getElementById(`ag-section-${selectedAGId}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }, 50)
+  }, [selectedAGId])
+
   const addStatus = (msg: string) => setStatusMessages(prev => [...prev, msg])
+
+  const startDownload = () => {
+    if (!currentVersionId) return
+    const a = document.createElement('a')
+    a.href = `/api/executions/${currentVersionId}/export`
+    a.download = ''
+    a.click()
+  }
+
+  const handleDownloadClick = () => {
+    if (!feedbackDone) {
+      setShowFeedback(true)
+    } else {
+      startDownload()
+    }
+  }
 
   const consumeSSE = async (res: Response) => {
     const reader = res.body?.getReader()
@@ -137,7 +206,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
             setCurrentPhase(event.phase)
 
             const summary = buildCheckpointSummary(outputs)
-            setCheckpointState({ versionId: vId, phase: event.phase, outputs, summary })
+            setCheckpointState({ versionId: vId, phase: event.phase, gotInfo: summary.gotInfo, missingInfo: summary.missingInfo })
 
             if (event.phase === 1) {
               setSelectedPrimary('ag-02-recruit')
@@ -145,14 +214,15 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
             }
 
             setAppStatus('checkpoint')
-            setShowCheckpointModal(true)
-            // Refresh version list
+            // Refresh version list + version data (to show completed AG outputs)
             fetch(`/api/projects/${id}/versions`).then(r => r.json()).then(setVersions).catch(() => {})
+            refreshVersion()
           } else if (event.type === 'pipeline_complete') {
             setAppStatus('completed')
             setCurrentAG(null)
             setCurrentPhase(5)
             fetch(`/api/projects/${id}/versions`).then(r => r.json()).then(setVersions).catch(() => {})
+            refreshVersion()
           } else if (event.type === 'error') {
             setErrorMessage(event.message)
             setAppStatus('error')
@@ -200,8 +270,24 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
   }
 
   const handleCheckpointConfirm = async () => {
-    if (!checkpointState) return
-    setShowCheckpointModal(false)
+    if (!checkpointState && !currentVersionId) return
+    const vIdForResume = checkpointState?.versionId ?? currentVersionId!
+    if (!checkpointState) {
+      // エラーからの再開：checkpointStateなしで直接resume
+      setAppStatus('running')
+      setErrorMessage(null)
+      addStatus('中断箇所から再開しています...')
+      try {
+        const res = await fetch(`/api/executions/${vIdForResume}/resume`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({}),
+        })
+        if (!res.ok) { setErrorMessage(`${res.status}: ${(await res.text()).slice(0, 200)}`); setAppStatus('error'); return }
+        await consumeSSE(res)
+      } catch (err) { setErrorMessage(err instanceof Error ? err.message : String(err)); setAppStatus('error') }
+      return
+    }
     setAppStatus('running')
     setCheckpointState(null)
 
@@ -256,9 +342,15 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
   }
 
   const currentVersion = versions.find(v => v.id === currentVersionId)
-  const displayOutput = selectedAGId
-    ? allOutputs.find(o => o.agentId === selectedAGId) ?? null
-    : null
+
+  // Merge completedAGs from SSE state + loaded version executions
+  const versionCompletedAGs = (version?.executions ?? [])
+    .filter(e => e.status === 'COMPLETED')
+    .map(e => e.agentId)
+  const effectiveCompletedAGs = Array.from(new Set([...completedAGs, ...versionCompletedAGs]))
+
+  // Version executions for OutputPanel
+  const versionExecutions: VersionExecution[] = version?.executions ?? []
 
   const tickerItems = appStatus === 'running' && currentAG
     ? [{ text: 'WEB PROPOSAL AGENT' }, { text: `${currentAG} 実行中`, hot: true }, { text: project.title }, { text: `PHASE ${currentPhase} / 5`, hot: true }]
@@ -340,8 +432,8 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
             エージェント進行状況
           </div>
           {AG_LIST.map(ag => {
-            const isDone = completedAGs.includes(ag.id)
-            const isActive = currentAG === ag.id
+            const isDone = effectiveCompletedAGs.includes(ag.id)
+            const isActive = currentAG === ag.id && !isDone
             const isSelected = selectedAGId === ag.id
             const isPending = !isDone && !isActive
 
@@ -367,7 +459,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
                   flexShrink: 0, borderRadius: '2px',
                   background: isDone ? 'var(--ink)' : isActive ? 'var(--red)' : 'transparent',
                 }}>
-                  {isDone ? '✓' : ag.id.replace('AG-', '')}
+                  {isDone ? '✓' : ag.badge}
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontFamily: 'var(--font-c)', fontSize: '9px', color: 'var(--ink3)', letterSpacing: '0.07em', marginBottom: '3px' }}>{ag.id}</div>
@@ -408,20 +500,17 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
         </div>
 
         {/* Output panel */}
-        <div style={{ display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
-
+        <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0 }}>
           {/* Output top bar */}
-          <div style={{ padding: '26px 40px 20px', borderBottom: '1px solid var(--line)', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '16px', flexShrink: 0 }}>
-            <div>
-              <div style={{ fontFamily: 'var(--font-d)', fontSize: '32px', fontWeight: 900, letterSpacing: '-0.025em', textTransform: 'uppercase', lineHeight: 1, color: 'var(--ink)' }}>
-                {selectedAGId ?? (currentAG ?? (allOutputs.length > 0 ? allOutputs[allOutputs.length - 1].agentId : 'OUTPUT'))}
+          <div style={{ padding: '16px 40px', borderBottom: '1px solid var(--line)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px', flexShrink: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <div style={{ fontFamily: 'var(--font-d)', fontSize: '22px', fontWeight: 900, letterSpacing: '-0.025em', textTransform: 'uppercase', lineHeight: 1, color: 'var(--ink)' }}>
+                {currentAG ?? (allOutputs.length > 0 ? 'OUTPUT' : 'OUTPUT')}
               </div>
               {project && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '7px', marginTop: '8px', fontFamily: 'var(--font-c)', fontSize: '11.5px', color: 'var(--ink3)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '7px', fontFamily: 'var(--font-c)', fontSize: '11px', color: 'var(--ink3)' }}>
+                  <span style={{ color: 'var(--ink4)' }}>—</span>
                   {project.title}
-                  <span style={{ background: 'var(--bg2)', border: '1px solid var(--line2)', borderRadius: '99px', padding: '2px 10px', fontSize: '10px', color: 'var(--ink2)' }}>
-                    {project.industryType}
-                  </span>
                 </div>
               )}
             </div>
@@ -433,96 +522,57 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
                 >
                   スライドプレビュー
                 </button>
-                <a
-                  href={`/api/executions/${currentVersionId}/export`}
-                  download
-                  style={{ background: 'transparent', border: '1px solid var(--line2)', color: 'var(--ink2)', fontFamily: 'var(--font-d)', fontSize: '8px', fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', padding: '8px 14px', cursor: 'pointer', borderRadius: '2px', textDecoration: 'none', display: 'inline-block' }}
+                <button
+                  onClick={handleDownloadClick}
+                  style={{ background: 'transparent', border: '1px solid var(--line2)', color: 'var(--ink2)', fontFamily: 'var(--font-d)', fontSize: '8px', fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', padding: '8px 14px', cursor: 'pointer', borderRadius: '2px' }}
                 >
-                  MD
-                </a>
+                  ↓ MD
+                </button>
               </div>
             )}
           </div>
-
-          {/* Thinking state */}
-          {appStatus === 'running' && currentAG && (
-            <div style={{ padding: '26px 40px', borderBottom: '1px solid var(--line)', background: 'var(--bg2)', flexShrink: 0 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '13px' }}>
-                <span style={{ fontFamily: 'var(--font-i)', fontSize: '11px', fontStyle: 'italic', color: 'var(--red)', letterSpacing: '0.05em' }}>分析中</span>
-                <div style={{ display: 'flex', gap: '4px' }}>
-                  {[0, 0.2, 0.4].map((delay, i) => (
-                    <span key={i} style={{ width: '5px', height: '5px', borderRadius: '50%', background: 'var(--red)', opacity: 0.4, animation: `td 1.4s ease-in-out ${delay}s infinite`, display: 'inline-block' }} />
-                  ))}
-                </div>
-              </div>
-              <div style={{ fontFamily: 'var(--font-c)', fontSize: '13px', lineHeight: 1.85, color: 'var(--ink2)', fontStyle: 'italic', maxWidth: '580px' }}>
-                {statusMessages[statusMessages.length - 1] ?? `${currentAG} を実行中...`}
-                <span style={{ display: 'inline-block', width: '2px', height: '13px', background: 'var(--red)', verticalAlign: 'middle', marginLeft: '1px', animation: 'cur 1s step-end infinite' }} />
-              </div>
-            </div>
-          )}
-
-          {/* Checkpoint waiting banner */}
-          {appStatus === 'checkpoint' && (
-            <div style={{ padding: '14px 40px', background: '#FFF8D6', borderBottom: '1px solid #E8C44A', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
-              <div>
-                <div style={{ fontFamily: 'var(--font-d)', fontSize: '9px', fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', color: '#7A5F00', marginBottom: '3px' }}>✋ あなたの操作が必要です</div>
-                <div style={{ fontFamily: 'var(--font-c)', fontSize: '11px', color: '#5A4700' }}>結果を確認して次のフェーズへ進んでください</div>
-              </div>
-              <button onClick={() => setShowCheckpointModal(true)} style={{ background: '#E8C44A', color: '#4A3800', fontFamily: 'var(--font-d)', fontSize: '9px', fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', padding: '10px 20px', border: 'none', cursor: 'pointer', borderRadius: '2px', whiteSpace: 'nowrap' }}>
-                確認・次へ →
-              </button>
-            </div>
-          )}
-
-          {/* Selected AG output (rail click) */}
-          {selectedAGId && displayOutput && (
-            <div style={{ flex: 1, overflowY: 'auto' }}>
-              <div style={{ padding: '14px 40px', background: 'var(--red2)', borderBottom: '1px solid var(--line)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
-                <span style={{ fontFamily: 'var(--font-c)', fontSize: '11px', color: 'var(--ink2)' }}>{selectedAGId} — 参照モード</span>
-                <button onClick={() => setSelectedAGId(null)} style={{ background: 'none', border: 'none', fontFamily: 'var(--font-c)', fontSize: '11px', color: 'var(--ink3)', cursor: 'pointer' }}>✕ 閉じる</button>
-              </div>
-              <OutputSection output={displayOutput} onEdit={handleSectionEdit} />
-            </div>
-          )}
-
-          {/* Empty state */}
-          {appStatus === 'idle' && allOutputs.length === 0 && !selectedAGId && (
-            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg2)' }}>
-              <div style={{ textAlign: 'center', maxWidth: '360px', padding: '40px' }}>
-                <div style={{ fontFamily: 'var(--font-d)', fontSize: '32px', marginBottom: '20px', color: 'var(--ink4)' }}>▶</div>
-                <h3 style={{ fontFamily: 'var(--font-d)', fontSize: '14px', fontWeight: 900, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '12px', color: 'var(--ink)' }}>
-                  AG-01 インテークを実行してください
-                </h3>
-                <p style={{ fontFamily: 'var(--font-c)', fontSize: '13px', lineHeight: 1.75, color: 'var(--ink3)', marginBottom: '28px' }}>
-                  案件情報の整理・AG推奨・仮説設定を行います<br />所要時間: 約10〜30秒
-                </p>
-                <button onClick={startPipeline} style={{ background: 'var(--ink)', color: 'var(--bg)', fontFamily: 'var(--font-d)', fontSize: '9px', fontWeight: 700, letterSpacing: '0.18em', textTransform: 'uppercase', padding: '14px 28px', border: 'none', cursor: 'pointer', borderRadius: '2px' }}>
-                  フルパイプライン実行 →
-                </button>
-              </div>
-            </div>
-          )}
 
           {/* Error state */}
           {appStatus === 'error' && errorMessage && (
             <div style={{ margin: '24px 40px', padding: '16px 20px', background: 'rgba(230,48,34,0.07)', border: '1px solid var(--red)', borderRadius: '2px', flexShrink: 0 }}>
               <div style={{ fontFamily: 'var(--font-d)', fontSize: '9px', fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', color: 'var(--red)', marginBottom: '6px' }}>エラー</div>
               <p style={{ fontFamily: 'var(--font-c)', fontSize: '13px', color: 'var(--ink2)', lineHeight: 1.6 }}>{errorMessage}</p>
-              <button onClick={startPipeline} style={{ marginTop: '12px', background: 'var(--ink)', color: 'var(--bg)', fontFamily: 'var(--font-d)', fontSize: '8px', fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', padding: '9px 18px', border: 'none', cursor: 'pointer', borderRadius: '2px' }}>
-                再試行
-              </button>
+              <div style={{ marginTop: '12px', display: 'flex', gap: '8px' }}>
+                {currentVersionId && effectiveCompletedAGs.length > 0 ? (
+                  <button
+                    onClick={handleCheckpointConfirm}
+                    style={{ background: 'var(--ink)', color: 'var(--bg)', fontFamily: 'var(--font-d)', fontSize: '8px', fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', padding: '9px 18px', border: 'none', cursor: 'pointer', borderRadius: '2px' }}
+                  >
+                    ↺ 中断箇所から再開
+                  </button>
+                ) : (
+                  <button onClick={startPipeline} style={{ background: 'var(--ink)', color: 'var(--bg)', fontFamily: 'var(--font-d)', fontSize: '8px', fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', padding: '9px 18px', border: 'none', cursor: 'pointer', borderRadius: '2px' }}>
+                    再試行
+                  </button>
+                )}
+              </div>
             </div>
           )}
 
-          {/* Completed outputs */}
-          {!selectedAGId && allOutputs.length > 0 && (
-            <div style={{ flex: 1, overflowY: 'auto' }}>
-              {allOutputs.map(output => (
-                <OutputSection key={output.agentId} output={output} onEdit={handleSectionEdit} />
-              ))}
-            </div>
-          )}
+          <div style={{ flex: 1, minHeight: 0 }}>
+            <OutputPanel
+              versionExecutions={versionExecutions}
+              currentAG={currentAG}
+              appStatus={appStatus}
+              selectedAgentId={selectedAGId}
+              onAgSelect={agId => setSelectedAGId(prev => prev === agId ? null : agId)}
+              checkpointState={checkpointState}
+              primaryOptions={PRIMARY_OPTIONS}
+              subOptions={SUB_OPTIONS}
+              selectedPrimary={selectedPrimary}
+              selectedSub={selectedSub}
+              onPrimaryChange={setSelectedPrimary}
+              onSubChange={setSelectedSub}
+              cdNotes={cdNotes}
+              onCdNoteChange={(key, val) => setCdNotes(prev => ({ ...prev, [key]: val }))}
+              onCheckpointConfirm={handleCheckpointConfirm}
+            />
+          </div>
         </div>
       </div>
 
@@ -543,10 +593,10 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
         </div>
         <button
           disabled={appStatus !== 'checkpoint'}
-          onClick={() => setShowCheckpointModal(true)}
+          onClick={handleCheckpointConfirm}
           style={{ background: appStatus === 'checkpoint' ? '#E8C44A' : 'var(--bg2)', color: appStatus === 'checkpoint' ? '#4A3800' : 'var(--ink4)', border: appStatus === 'checkpoint' ? 'none' : '1px solid var(--line2)', fontFamily: 'var(--font-d)', fontSize: '9px', fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', padding: '11px 22px', cursor: appStatus === 'checkpoint' ? 'pointer' : 'not-allowed', borderRadius: '2px' }}
         >
-          {appStatus === 'checkpoint' ? '✋ 確認後に進む →' : '次のフェーズへ →'}
+          {appStatus === 'checkpoint' ? '✋ 次のフェーズへ →' : '次のフェーズへ →'}
         </button>
       </div>
 
@@ -555,143 +605,14 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
         <TableOfContents versionId={currentVersionId} onClose={() => setShowSlides(false)} />
       )}
 
-      {/* Checkpoint Modal */}
-      {showCheckpointModal && checkpointState && (
-        <div
-          style={{ position: 'fixed', inset: 0, background: 'rgba(252,251,239,0.86)', backdropFilter: 'blur(5px)', zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-          onClick={e => { if (e.target === e.currentTarget) setShowCheckpointModal(false) }}
-        >
-          <div style={{ width: '700px', maxHeight: '90vh', background: 'var(--bg)', border: '1px solid var(--line2)', boxShadow: '0 28px 72px rgba(28,28,23,0.11)', overflowY: 'auto', position: 'relative' }}>
-            <div style={{ position: 'absolute', top: '-8px', right: '40px', width: '14px', height: '14px', borderRadius: '50%', background: 'var(--dot-b)', opacity: 0.6 }} />
-            <div style={{ position: 'absolute', bottom: '-6px', left: '56px', width: '9px', height: '9px', borderRadius: '50%', background: 'var(--dot-g)', opacity: 0.7 }} />
-
-            {/* Modal header */}
-            <div style={{ padding: '26px 30px 22px', borderBottom: '1px solid var(--line)', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-              <div>
-                <div style={{ fontFamily: 'var(--font-i)', fontSize: '11px', fontStyle: 'italic', color: 'var(--red)', letterSpacing: '0.04em', marginBottom: '7px' }}>
-                  ✋ チェックポイント {checkpointState.phase === 1 ? '①' : checkpointState.phase === 2 ? '②' : checkpointState.phase === 3 ? '③' : '④'}
-                </div>
-                <div style={{ fontFamily: 'var(--font-d)', fontSize: '22px', fontWeight: 900, letterSpacing: '-0.02em', textTransform: 'uppercase', lineHeight: 1 }}>
-                  {checkpointState.phase === 1 ? 'AG選択・確認' : checkpointState.phase === 2 ? '市場/競合分析 確認' : checkpointState.phase === 3 ? '課題/ファクト 確認' : '設計/草案 完了'}
-                </div>
-              </div>
-              <button onClick={() => setShowCheckpointModal(false)} style={{ background: 'none', border: 'none', fontSize: '17px', color: 'var(--ink3)', cursor: 'pointer' }}>✕</button>
-            </div>
-
-            <div style={{ padding: '22px 30px' }}>
-
-              {/* Phase 1: AG selector */}
-              {checkpointState.phase === 1 && (
-                <>
-                  <p style={{ fontFamily: 'var(--font-c)', fontSize: '13px', color: 'var(--ink3)', lineHeight: 1.75, marginBottom: '22px' }}>
-                    AG-01のインテーク結果をもとに使用するエージェントを確認・選択してください。
-                  </p>
-                  <div style={{ fontFamily: 'var(--font-d)', fontSize: '8.5px', fontWeight: 700, letterSpacing: '0.2em', textTransform: 'uppercase', color: 'var(--ink3)', marginBottom: '11px' }}>
-                    大分類AG <span style={{ fontWeight: 400, color: 'var(--red)' }}>必須 · 1つ</span>
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '22px' }}>
-                    {PRIMARY_OPTIONS.map(opt => (
-                      <label key={opt.value} onClick={() => setSelectedPrimary(opt.value)} style={{ display: 'flex', alignItems: 'center', gap: '13px', padding: '13px 16px', border: `1px solid ${selectedPrimary === opt.value ? 'var(--red)' : 'var(--line)'}`, background: selectedPrimary === opt.value ? 'var(--red2)' : 'transparent', cursor: 'pointer', borderRadius: '2px' }}>
-                        <div style={{ width: '15px', height: '15px', border: `1.5px solid ${selectedPrimary === opt.value ? 'var(--red)' : 'var(--line2)'}`, borderRadius: '50%', flexShrink: 0, position: 'relative', background: selectedPrimary === opt.value ? 'var(--red)' : 'transparent' }}>
-                          {selectedPrimary === opt.value && <span style={{ position: 'absolute', top: '2.5px', left: '2.5px', width: '8px', height: '8px', background: '#fff', borderRadius: '50%', display: 'block' }} />}
-                        </div>
-                        <div style={{ flex: 1 }}>
-                          <div style={{ fontFamily: 'var(--font-c)', fontSize: '9.5px', color: 'var(--ink3)', marginBottom: '2px' }}>{opt.value.toUpperCase()}</div>
-                          <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--ink)' }}>{opt.label}</div>
-                          <div style={{ fontFamily: 'var(--font-c)', fontSize: '10.5px', color: 'var(--ink3)', marginTop: '2px' }}>{opt.desc}</div>
-                        </div>
-                      </label>
-                    ))}
-                  </div>
-                  <div style={{ fontFamily: 'var(--font-d)', fontSize: '8.5px', fontWeight: 700, letterSpacing: '0.2em', textTransform: 'uppercase', color: 'var(--ink3)', marginBottom: '11px' }}>
-                    業種コンテキスト SUB <span style={{ fontWeight: 400, color: 'var(--ink3)' }}>任意 · 複数可</span>
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', marginBottom: '6px' }}>
-                    {SUB_OPTIONS.map(opt => {
-                      const isOn = selectedSub.includes(opt.value)
-                      return (
-                        <label key={opt.value} onClick={() => setSelectedSub(prev => isOn ? prev.filter(s => s !== opt.value) : [...prev, opt.value])} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 12px', border: `1px solid ${isOn ? 'var(--red)' : 'var(--line)'}`, background: isOn ? 'var(--red2)' : 'transparent', cursor: 'pointer', borderRadius: '2px' }}>
-                          <div style={{ width: '14px', height: '14px', border: `1.5px solid ${isOn ? 'var(--red)' : 'var(--line2)'}`, flexShrink: 0, background: isOn ? 'var(--red)' : 'transparent', borderRadius: '2px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            {isOn && <span style={{ color: '#fff', fontSize: '9px', lineHeight: 1 }}>✓</span>}
-                          </div>
-                          <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--ink)' }}>{opt.label}</span>
-                        </label>
-                      )
-                    })}
-                  </div>
-                </>
-              )}
-
-              {/* Phase 2,3: Summary */}
-              {checkpointState.phase >= 2 && (
-                <>
-                  {/* 取れた情報 */}
-                  {checkpointState.summary.gotInfo.length > 0 && (
-                    <div style={{ marginBottom: '22px' }}>
-                      <div style={{ fontFamily: 'var(--font-d)', fontSize: '8.5px', fontWeight: 700, letterSpacing: '0.2em', textTransform: 'uppercase', color: 'var(--ink3)', marginBottom: '11px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <span style={{ color: 'var(--dot-g)' }}>✅</span> 取れた情報
-                      </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                        {checkpointState.summary.gotInfo.slice(0, 6).map((item, i) => (
-                          <div key={i} style={{ display: 'flex', gap: '12px', padding: '11px 14px', background: 'var(--bg2)', borderLeft: `3px solid ${CONFIDENCE_COLOR[item.confidence] ?? 'var(--line2)'}` }}>
-                            <span style={{ fontFamily: 'var(--font-d)', fontSize: '8px', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: CONFIDENCE_COLOR[item.confidence], flexShrink: 0, marginTop: '2px' }}>{item.confidence}</span>
-                            <div>
-                              <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--ink)', marginBottom: '3px' }}>{item.title}</div>
-                              {item.summary && <div style={{ fontFamily: 'var(--font-c)', fontSize: '11px', color: 'var(--ink3)', lineHeight: 1.6 }}>{item.summary}</div>}
-                              <div style={{ fontFamily: 'var(--font-d)', fontSize: '8px', color: 'var(--ink4)', marginTop: '4px', letterSpacing: '0.06em' }}>{item.source}</div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* ヒアリング項目 */}
-                  {checkpointState.summary.missingInfo.length > 0 && (
-                    <div style={{ marginBottom: '22px' }}>
-                      <div style={{ fontFamily: 'var(--font-d)', fontSize: '8.5px', fontWeight: 700, letterSpacing: '0.2em', textTransform: 'uppercase', color: 'var(--ink3)', marginBottom: '11px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <span>❓</span> 取れなかった情報 → ヒアリング項目
-                      </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                        {checkpointState.summary.missingInfo.slice(0, 5).map((item, i) => (
-                          <div key={i} style={{ padding: '12px 14px', border: '1px solid var(--line2)', borderRadius: '2px' }}>
-                            <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--ink)', marginBottom: '4px' }}>{item.item}</div>
-                            {item.reason && <div style={{ fontFamily: 'var(--font-c)', fontSize: '11px', color: 'var(--ink3)', marginBottom: '8px', lineHeight: 1.5 }}>{item.reason}</div>}
-                            <input
-                              placeholder="確認した内容を入力..."
-                              value={cdNotes[`missing-${i}`] ?? ''}
-                              onChange={e => setCdNotes(prev => ({ ...prev, [`missing-${i}`]: e.target.value }))}
-                              style={{ width: '100%', background: 'transparent', border: 'none', borderBottom: '1px solid var(--line2)', padding: '6px 0', fontSize: '12px', fontFamily: 'var(--font-c)', color: 'var(--ink)', outline: 'none' }}
-                            />
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* 判断 */}
-                  <div style={{ padding: '16px', background: 'var(--bg2)', borderRadius: '2px', marginBottom: '6px' }}>
-                    <div style={{ fontFamily: 'var(--font-d)', fontSize: '8.5px', fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', color: 'var(--ink3)', marginBottom: '10px' }}>判断してください</div>
-                    <label style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', cursor: 'pointer' }}>
-                      <div style={{ width: '14px', height: '14px', borderRadius: '50%', border: '2px solid var(--ink)', background: 'var(--ink)', flexShrink: 0, marginTop: '2px' }} />
-                      <span style={{ fontFamily: 'var(--font-c)', fontSize: '12px', color: 'var(--ink)', lineHeight: 1.5 }}>このまま次へ進む（ヒアリング項目は後で更新可）</span>
-                    </label>
-                  </div>
-                </>
-              )}
-            </div>
-
-            {/* Modal footer */}
-            <div style={{ padding: '16px 30px 22px', borderTop: '1px solid var(--line)', display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
-              <button
-                onClick={handleCheckpointConfirm}
-                style={{ background: 'var(--ink)', color: 'var(--bg)', fontFamily: 'var(--font-d)', fontSize: '9px', fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', padding: '13px 26px', border: 'none', cursor: 'pointer', borderRadius: '2px', whiteSpace: 'nowrap' }}
-              >
-                {checkpointState.phase === 1 ? 'この選択で実行する →' : checkpointState.phase < 4 ? '次のフェーズへ進む →' : '完了 — 提案書を確認する →'}
-              </button>
-            </div>
-          </div>
-        </div>
+      {/* Feedback Modal */}
+      {showFeedback && currentVersionId && (
+        <FeedbackModal
+          versionId={currentVersionId}
+          chapters={[]}
+          onComplete={() => { setShowFeedback(false); setFeedbackDone(true); startDownload() }}
+          onSkip={() => { setShowFeedback(false); setFeedbackDone(true); startDownload() }}
+        />
       )}
     </div>
   )
