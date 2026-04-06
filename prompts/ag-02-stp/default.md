@@ -119,7 +119,13 @@ IA・コンテンツ・導線・CTAの設計に「根拠」が生まれる。
 
 選択後に必ず答える問い：
   「このセグメントを優先することで、IA設計の何が変わるか」
-  これに答えられない選択は間違っている。
+  「このセグメントがCVするためにファーストビューに必ず入れるものは何か」
+  「このセグメントを最優先にすることで疎かになる層と、それを許容できる理由は何か」
+  これらに答えられない選択は間違っている。
+
+secondarySegmentも定義する：
+  primaryの次にCVインパクトが高いセグメント
+  primaryと訴求が重なりすぎない（異なるコンテンツを必要とする）ことを確認する
 
 ### Task 4：ポジショニング軸を設定する
 
@@ -183,14 +189,20 @@ JSONのみ。コードフェンス・説明文・前置き不要。
       "contentNeeds": ["具体的なコンテンツタイプ（「会社情報」ではなく「SIer出身社員の入社後インタビュー」レベルで）"],
       "exitReason": "〇〇を探したが見つからなかったため離脱する（具体的に）",
       "cvPotential": "high|medium|low",
-      "cvPotentialReason": "なぜこのポテンシャルか"
+      "cvPotentialReason": "なぜこのポテンシャルか",
+      "typicalPersona": "このセグメントの具体的な人物像（職種・状況・心理状態を含む1〜2文）",
+      "keyQuestion": "このセグメントがサイトに来て最初に頭の中にある問い（1文）",
+      "dealBreaker": "この問いに答えられない場合に即離脱する理由"
     }
   ],
   "targeting": {
     "primarySegment": "seg-XX",
+    "secondarySegment": "seg-XX",
     "selectionLogic": "CVポテンシャル × 訪問者数で最大インパクトになる理由",
     "tradeoff": "このセグメントを優先することで疎かになるセグメントと、その許容理由",
-    "iaImplication": "このセグメントを優先することでIA設計が具体的にどう変わるか"
+    "iaImplication": "このセグメントを優先することでIA設計が具体的にどう変わるか",
+    "firstViewMust": "primarySegmentのためにファーストビューに必ず入れるもの（3点）",
+    "keyContent": ["primarySegmentが「これがなければ帰る」と感じる必須コンテンツ"]
   },
   "positioning": {
     "axis1": {

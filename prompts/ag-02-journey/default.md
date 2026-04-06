@@ -169,25 +169,31 @@ JSONのみ。コードフェンス・説明文・前置き不要。
     {
       "phase": "Awareness|Interest|Consideration|Intent|CV",
       "visitState": {
-        "knowledge": "何を知っていて・何を知らないか",
+        "knowledge": "何を知っていて・何を知らないか（AG-03 layer4の先入観も含む）",
         "seeking": "何を探しているか・何を確認したいか",
-        "emotion": "どんな感情状態か（期待・不安・疑念・焦り等）"
+        "emotion": "どんな感情状態か（期待・不安・疑念・焦り等）",
+        "internalNarrative": "この訪問者の頭の中の独り言（1〜2文・ターゲットの言葉で）"
       },
       "touchpoints": [
         {
           "location": "Webサイト上のどのページ・外部メディア",
-          "entryTrigger": "何のきっかけでここに来るか"
+          "entryTrigger": "何のきっかけでここに来るか",
+          "priorMedia": "来る前に見ていたメディア（AG-03 layer4から）"
         }
       ],
       "timeOnSite": "このフェーズで平均何分サイトを見るか（推定）",
+      "decisionCriteriaActive": ["このフェーズで確認しにくる比較軸（AG-03-MAINのdecisionCriteriaから）"],
+      "psychologicalBarriersActive": ["このフェーズで発動する心理的競合（AG-03 layer3から）"],
       "barriers": [
         {
           "barrier": "次のフェーズに進めない理由（設計で解決できるもの・具体的に）",
+          "barrierType": "information|trust|action|psychological",
           "designCause": "なぜその問題が設計上発生するか",
           "designSolution": "解消するための設計アクション（具体的なページ・コンテンツ）"
         }
       ],
-      "siteRole": "このフェーズでWebサイトがすべきこと（どのページで・どのコンテンツで・どう体験させるか）"
+      "siteRole": "このフェーズでWebサイトがすべきこと（どのページで・どのコンテンツで・どう体験させるか）",
+      "keyMessage": "このフェーズでターゲットに伝える最重要メッセージ（1文）"
     }
   ],
 
