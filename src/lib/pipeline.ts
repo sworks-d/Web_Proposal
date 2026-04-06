@@ -2,7 +2,10 @@ import { PrismaClient } from '@prisma/client'
 import { AgentInput, AgentOutput, AgentId, PipelineConfig } from '@/agents/types'
 import { safeParseJson } from '@/lib/json-cleaner'
 import { IntakeAgent } from '@/agents/ag-01-intake'
+import { Ag01ResearchAgent } from '@/agents/ag-01-research'
+import { Ag01MergeAgent } from '@/agents/ag-01-merge'
 import { Ag02BaseAgent } from '@/agents/ag-02-base'
+import { Ag02PositionAgent } from '@/agents/ag-02-position'
 import { Ag02RecruitAgent } from '@/agents/ag-02-recruit'
 import { Ag02BrandAgent } from '@/agents/ag-02-brand'
 import { Ag02EcAgent } from '@/agents/ag-02-ec'
@@ -29,6 +32,10 @@ import { Ag07StoryAgent } from '@/agents/ag-07-story'
 import { Ag07aAnalysisAgent } from '@/agents/ag-07a-analysis'
 import { Ag07bReferenceAgent } from '@/agents/ag-07b-reference'
 import { Ag07cStoryAgent } from '@/agents/ag-07c-story'
+import { Ag07c1Agent } from '@/agents/ag-07c-1'
+import { Ag07c2Agent } from '@/agents/ag-07c-2'
+import { Ag07c3Agent } from '@/agents/ag-07c-3'
+import { Ag07c4Agent } from '@/agents/ag-07c-4'
 
 const prisma = new PrismaClient()
 
@@ -62,16 +69,19 @@ export async function runAgentStep(
   let agent
   switch (agentId) {
     case 'AG-01': agent = new IntakeAgent(); break
+    case 'AG-01-RESEARCH': agent = new Ag01ResearchAgent(); break
+    case 'AG-01-MERGE': agent = new Ag01MergeAgent(); break
     case 'AG-02': {
       const ag02 = createAg02Agent(config.primaryAgent)
       ag02.setSubAgents(config.subAgents)
       agent = ag02
       break
     }
-    case 'AG-02-JOURNEY': agent = new Ag02JourneyAgent(); break
-    case 'AG-02-STP':     agent = new Ag02StpAgent(); break
-    case 'AG-02-VPC':     agent = new Ag02VpcAgent(); break
-    case 'AG-02-MERGE':   agent = new Ag02MergeAgent(); break
+    case 'AG-02-JOURNEY':   agent = new Ag02JourneyAgent(); break
+    case 'AG-02-STP':       agent = new Ag02StpAgent(); break
+    case 'AG-02-VPC':       agent = new Ag02VpcAgent(); break
+    case 'AG-02-MERGE':     agent = new Ag02MergeAgent(); break
+    case 'AG-02-POSITION':  agent = new Ag02PositionAgent(); break
     case 'AG-03': agent = new Ag03CompetitorAgent(); break
     case 'AG-03-DATA': agent = new Ag03DataAgent(); break
     case 'AG-03-GAP': agent = new Ag03GapAgent(); break
@@ -85,8 +95,12 @@ export async function runAgentStep(
     case 'AG-06': agent = new Ag06DraftAgent(); break
     case 'AG-07': agent = new Ag07StoryAgent(); break
     case 'AG-07A': agent = new Ag07aAnalysisAgent(); break
-    case 'AG-07B': agent = new Ag07bReferenceAgent(); break
-    case 'AG-07C': agent = new Ag07cStoryAgent(); break
+    case 'AG-07B':   agent = new Ag07bReferenceAgent(); break
+    case 'AG-07C':   agent = new Ag07cStoryAgent(); break
+    case 'AG-07C-1': agent = new Ag07c1Agent(); break
+    case 'AG-07C-2': agent = new Ag07c2Agent(); break
+    case 'AG-07C-3': agent = new Ag07c3Agent(); break
+    case 'AG-07C-4': agent = new Ag07c4Agent(); break
     default: throw new Error(`Unknown agent: ${agentId}`)
   }
 
@@ -284,6 +298,26 @@ function extractContextSections(agentId: string, p: any): AgentOutput['sections'
     case 'AG-07C': return [
       s('concept',     'コンセプトワード',        (p.conceptWords ?? []).slice(0, 2).map((c: any, i: number) => `案${i + 1}: ${c.copy} — ${c.subCopy ?? ''}`).join('\n')),
       s('storyline',   '目次・章構成',            (p.storyLine ?? []).map((ch: any) => `${ch.chapterTitle}: ${ch.keyMessage ?? ''}`).join('\n')),
+    ]
+    case 'AG-01-RESEARCH': return [
+      s('company',     '会社基本情報',            `売上: ${(p.companyBasics as any)?.revenue?.value ?? '不明'} ${(p.companyBasics as any)?.revenue?.unit ?? ''}\n従業員: ${(p.companyBasics as any)?.employees?.value ?? '不明'}人`),
+      s('industry',    '業界ポジション',          `推定順位: ${(p.industryProfile as any)?.clientEstimatedRank ?? '不明'}\nシェア: ${(p.industryProfile as any)?.clientMarketShare?.value ?? '不明'}%`),
+      s('gaps',        '主観 vs 客観のズレ',      arr(((p.subjectiveVsObjective as any)?.gaps ?? []).slice(0, 3))),
+    ]
+    case 'AG-01-MERGE': return [
+      s('basics',      '確定済み基礎情報',        `業界: ${(p.confirmedBasics as any)?.industry ?? ''}\nエリア: ${(p.confirmedBasics as any)?.areaScope ?? ''}\n業界内順位: ${(p.confirmedBasics as any)?.industryRank ?? ''}`),
+      s('insights',    'AG-02以降への発見',       arr((p.keyInsights ?? []).slice(0, 3))),
+      s('forAG02Pos',  'AG-02-POSITION向け',      String(p.forAG02Position ?? '')),
+    ]
+    case 'AG-02-POSITION': return [
+      s('axis1',       '軸1（エリア×規模）',      `${(p.axis1_area_scale as any)?.qualitativeAssessment ?? ''}\n示唆: ${(p.axis1_area_scale as any)?.designImplication ?? ''}`),
+      s('axis4',       '軸4（デジタル成熟度）',    `${(p.axis4_industry_digital as any)?.qualitativeAssessment ?? ''}\n示唆: ${(p.axis4_industry_digital as any)?.designImplication ?? ''}`),
+      s('integrated',  '統合ポジション',          `現在地: ${(p.integratedPosition as any)?.summary ?? ''}\n差別化機会: ${(p.integratedPosition as any)?.uniqueOpportunity ?? ''}`),
+    ]
+    case 'AG-04-INSIGHT': return [
+      s('target',      'ターゲット定義',          `${(p.targetDefinition as any)?.whoConverts ?? ''}\n状態: ${(p.targetDefinition as any)?.contextualState ?? ''}`),
+      s('insight',     'インサイト',              `葛藤: ${(p.targetInsight as any)?.emotionalTension ?? ''}\nトリガー: ${(p.targetInsight as any)?.triggerMoment ?? ''}`),
+      s('problems',    '解くべき問い',            (p.coreProblemStatements ?? []).slice(0, 3).map((x: any) => `[${x.priority}] ${x.statement}`).join('\n')),
     ]
     case 'AG-07C-1':
     case 'AG-07C-2':

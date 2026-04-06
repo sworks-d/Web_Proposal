@@ -4,12 +4,15 @@ import { safeParseJson } from '@/lib/json-cleaner'
 
 const AG_MAX_TOKENS: Record<string, number> = {
   'AG-01': 4096,
+  'AG-01-RESEARCH': 8192,
+  'AG-01-MERGE':    4096,
   // AG-02系
   'AG-02':          16384,
   'AG-02-STP':      16384,
   'AG-02-JOURNEY':  16384,
   'AG-02-VPC':      16384,
   'AG-02-MERGE':    16384,
+  'AG-02-POSITION': 8192,
   // AG-03系
   'AG-03':          16384,
   'AG-03-HEURISTIC':  16384,
@@ -20,15 +23,21 @@ const AG_MAX_TOKENS: Record<string, number> = {
   // AG-04系
   'AG-04':          16384,
   'AG-04-MAIN':     16384,
+  'AG-04-INSIGHT':  16384,
   'AG-04-MERGE':    16384,
   // AG-05〜07
   'AG-05': 8192,
   'AG-05': 16384,
   'AG-06': 32768,  // 設計草案は出力量が多いため拡張
   'AG-07': 16384,
-  'AG-07A': 8192,
-  'AG-07B': 4096,
+  'AG-07A': 16384,
+  'AG-07B': 16384,
   'AG-07C': 16384,
+  // AG-07C分割
+  'AG-07C-1': 8192,
+  'AG-07C-2': 8192,
+  'AG-07C-3': 6144,
+  'AG-07C-4': 4096,
 }
 
 export abstract class BaseAgent {

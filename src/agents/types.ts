@@ -1,10 +1,11 @@
 export type AgentId =
-  | 'AG-01' | 'AG-02' | 'AG-03'
-  | 'AG-04' | 'AG-05' | 'AG-06' | 'AG-07'
-  | 'AG-02-JOURNEY' | 'AG-02-STP' | 'AG-02-VPC' | 'AG-02-MERGE'
-  | 'AG-03-DATA' | 'AG-03-GAP' | 'AG-03-HEURISTIC' | 'AG-03-HEURISTIC2' | 'AG-03-MERGE'
-  | 'AG-04-MAIN' | 'AG-04-MERGE'
-  | 'AG-07A' | 'AG-07B' | 'AG-07C'
+  | 'AG-01' | 'AG-01-RESEARCH' | 'AG-01-MERGE'
+  | 'AG-02' | 'AG-02-STP' | 'AG-02-JOURNEY' | 'AG-02-VPC' | 'AG-02-MERGE' | 'AG-02-POSITION'
+  | 'AG-03' | 'AG-03-HEURISTIC' | 'AG-03-HEURISTIC2' | 'AG-03-GAP' | 'AG-03-DATA' | 'AG-03-MERGE'
+  | 'AG-04' | 'AG-04-MAIN' | 'AG-04-INSIGHT' | 'AG-04-MERGE'
+  | 'AG-05'
+  | 'AG-06'
+  | 'AG-07' | 'AG-07A' | 'AG-07B' | 'AG-07C' | 'AG-07C-1' | 'AG-07C-2' | 'AG-07C-3' | 'AG-07C-4'
 
 export type ConfidenceLevel = 'high' | 'medium' | 'low'
 export type VizType = 'chart' | 'mermaid' | 'matrix' | 'positioning'

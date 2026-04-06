@@ -32,10 +32,13 @@ export interface VersionExecution {
 
 const AG_LABELS: Record<string, string> = {
   'AG-01':            'インテーク担当',
+  'AG-01-RESEARCH':   '会社情報リサーチ',
+  'AG-01-MERGE':      'インテーク統合',
   'AG-02':            '市場骨格分析',
   'AG-02-STP':        'STPセグメンテーション',
   'AG-02-JOURNEY':    'カスタマージャーニー',
   'AG-02-VPC':        'バリュープロポジション',
+  'AG-02-POSITION':   '4軸ポジショニング',
   'AG-02-MERGE':      '市場分析統合',
   'AG-03':            '競合特定・ポジション',
   'AG-03-HEURISTIC':  'ヒューリスティック評価（上位2社）',
@@ -44,22 +47,26 @@ const AG_LABELS: Record<string, string> = {
   'AG-03-DATA':       'GA4・SC分析',
   'AG-03-MERGE':      '競合分析統合',
   'AG-04-MAIN':       '5Whys・HMW',
-  'AG-04':            'インサイト・JTBD',
+  'AG-04-INSIGHT':    'インサイト・JTBD',
   'AG-04-MERGE':      '課題定義統合',
   'AG-05':            'ファクトチェック',
   'AG-06':            '設計草案',
   'AG-07A':           '設計根拠ライター',
   'AG-07B':           'リファレンス戦略',
   'AG-07C':           '提案書草案',
+  'AG-07C-1':         '素材セット Ch.01-02',
+  'AG-07C-2':         '素材セット Ch.03-04',
+  'AG-07C-3':         '素材セット Ch.05-06',
+  'AG-07C-4':         '素材 サマリー',
 }
 
 const AGENT_ORDER = [
-  'AG-01',
-  'AG-02', 'AG-02-STP', 'AG-02-JOURNEY', 'AG-02-VPC', 'AG-02-MERGE',
+  'AG-01', 'AG-01-RESEARCH', 'AG-01-MERGE',
+  'AG-02', 'AG-02-STP', 'AG-02-JOURNEY', 'AG-02-VPC', 'AG-02-POSITION', 'AG-02-MERGE',
   'AG-03', 'AG-03-HEURISTIC', 'AG-03-HEURISTIC2', 'AG-03-GAP', 'AG-03-DATA', 'AG-03-MERGE',
-  'AG-04-MAIN', 'AG-04', 'AG-04-MERGE',
+  'AG-04-MAIN', 'AG-04-INSIGHT', 'AG-04-MERGE',
   'AG-05', 'AG-06',
-  'AG-07A', 'AG-07B', 'AG-07C',
+  'AG-07A', 'AG-07B', 'AG-07C-1', 'AG-07C-2', 'AG-07C-3', 'AG-07C-4',
 ]
 
 interface CheckpointState {
@@ -100,8 +107,9 @@ export function OutputPanel({
   }, [statusMessages])
 
   // Completed executions sorted newest first (AG-07 → AG-01)
+  // 最新のCOMPLETEDを使う（feedbackによる再実行結果を優先）
   const completedExecutions = [...AGENT_ORDER]
-    .map(id => versionExecutions.find(e => e.agentId === id && e.status === 'COMPLETED'))
+    .map(id => versionExecutions.slice().reverse().find(e => e.agentId === id && e.status === 'COMPLETED'))
     .filter((e): e is VersionExecution => Boolean(e))
     .reverse()
 

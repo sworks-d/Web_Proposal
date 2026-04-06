@@ -3,7 +3,7 @@ import { AgentId, AgentOutput, ProjectContext } from './types'
 import { loadPrompt } from '@/lib/prompt-loader'
 
 export class Ag04InsightAgent extends BaseAgent {
-  id: AgentId = 'AG-04'
+  id: AgentId = 'AG-04-INSIGHT'
   name = '課題構造化'
   protected modelType = 'quality' as const
 

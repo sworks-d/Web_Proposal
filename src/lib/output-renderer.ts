@@ -576,16 +576,13 @@ export function renderAG07CSlides(json: any): OutputSection[] {
 
     const catchLines = catchOpts.map((c: any) =>
       `【${c.angle ?? c.id}】${c.copy}`
-    ).join('
-')
+    ).join('\n')
 
-    const bulletLines = bullets.map((b: string) => `▸ ${b}`).join('
-')
+    const bulletLines = bullets.map((b: string) => `▸ ${b}`).join('\n')
 
     const evidenceLines = evidence.slice(0, 3).map((e: any) =>
       `${e.reliability ?? ''} ${e.fact ?? e.source ?? ''}`
-    ).join('
-')
+    ).join('\n')
 
     const visualLine = vs
       ? `[${vs.type ?? ''}] ${vs.content ?? ''} / ${vs.caption ?? ''}`
