@@ -94,10 +94,22 @@ export async function runAgentStep(
   let parseError = false
   let parseErrorMessage: string | undefined
   let rawText = ''
+  let cleanedText = ''
 
   try {
     output = await agent.execute(input)
     rawText = agent.lastRawText
+    // コードフェンス・前後の余分なテキストを除去してJSONだけ保存する
+    const fenceMatch = rawText.match(/```(?:json)?\s*([\s\S]*?)```/)
+    if (fenceMatch) {
+      cleanedText = fenceMatch[1].trim()
+    } else {
+      const jsonStart = rawText.search(/[\[{]/)
+      const jsonEnd   = Math.max(rawText.lastIndexOf('}'), rawText.lastIndexOf(']'))
+      cleanedText = (jsonStart !== -1 && jsonEnd > jsonStart)
+        ? rawText.slice(jsonStart, jsonEnd + 1)
+        : rawText.trim()
+    }
   } catch (err) {
     // AG実行自体が失敗（パースエラー含む）
     const message = err instanceof Error ? err.message : String(err)
@@ -105,7 +117,7 @@ export async function runAgentStep(
     parseErrorMessage = message
 
     await prisma.agentResult.create({
-      data: { executionId: execution.id, agentId, outputJson: '', parseError: true, parseErrorMessage: message },
+      data: { executionId: execution.id, agentId, outputJson: cleanedText || '', parseError: true, parseErrorMessage: message },
     })
     await prisma.execution.update({
       where: { id: execution.id },
@@ -116,7 +128,7 @@ export async function runAgentStep(
 
   // 保存・完了処理
   await prisma.agentResult.create({
-    data: { executionId: execution.id, agentId, outputJson: rawText, parseError, parseErrorMessage },
+    data: { executionId: execution.id, agentId, outputJson: cleanedText || rawText, parseError, parseErrorMessage },
   })
   await prisma.execution.update({
     where: { id: execution.id },

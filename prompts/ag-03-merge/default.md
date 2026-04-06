@@ -4,14 +4,18 @@
 
 ## Layer 0：このAGが存在する理由
 
-AG-03-HEURISTIC / HEURISTIC2 / GAP / DATA の4つが独立して動いた。
-それぞれが異なる角度で競合を分析している：
-  - HEURISTIC：UX設計の問題
-  - GAP：コンテンツの空白地帯
-  - DATA：実際の訪問者行動データ
+AG-03の全サブAGが独立して動いた。
+それぞれが異なる角度で分析している：
+  - HEURISTIC/HEURISTIC2：競合サイトのUX設計問題
+  - GAP：競合との4層コンテンツGAP
+  - DATA：実際の訪問者行動データ（inputPattern=Cのみ）
+  - CURRENT：現状サイトの8軸多角的分析（リニューアル案件のみ）
 
-これら3層の分析が「同じ結論を指しているか」「矛盾しているか」を確認し、
-「クライアントの差別化設計の優先順位」として1つの答えを出すのがこのAGの仕事。
+リニューアル案件では「競合の弱点」と「自社の現状問題」の両方が揃う。
+この二重比較が提案書の最強の根拠になる：
+「競合他社もここが弱い。かつ自社サイトはそれよりもさらに遅れている」
+
+これら全ての分析の矛盾を解消して「差別化設計の優先順位」を決めるのがこのAGの仕事。
 
 **重要：siteDesignPrinciples はAG-02-MERGEで確定済み。このAGは生成しない。**
 競合分析から判明した「追加・修正すべき原則」があればsiteDesignAdditionsに出力する。
@@ -192,7 +196,14 @@ JSONのみ。コードフェンス・説明文・前置き不要。
     }
   ],
 
-  "forAG04": "5 Whysの起点となる競合分析の最重要発見",
+  "currentSiteStatus": {
+    "hasCurrentAnalysis": true,
+    "topIssues": ["AG-03-CURRENTのpriorityIssues上位3件を引用"],
+    "renovationRationale": "AG-03-CURRENTのrenovationRationale.summaryを要約",
+    "currentVsCompetitor": "自社現状と競合の差を1〜2文で統合評価"
+  },
+
+  "forAG04": "5 Whysの起点となる分析の最重要発見（競合差分＋現状サイト問題を統合）",
   "forAG06": "設計草案で採用すべき差別化設計アクション（3つ以内）",
 
   "confidence": "high|medium|low",

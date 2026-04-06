@@ -506,3 +506,125 @@ npm run dev
 # 5. AG-07C-4 がその後に実行されること
 # 6. AG出力に chartData がある場合にグラフが描画されること
 ```
+
+---
+
+## Task 8：AG-03-CURRENT のクラスファイルと組み込み
+
+### 8-1. クラスファイルを作成
+
+`src/agents/ag-03-current.ts`：
+
+```typescript
+import { BaseAgent } from './base-agent'
+import { AgentId, AgentOutput, ProjectContext } from './types'
+import { loadPrompt } from '@/lib/prompt-loader'
+
+export class Ag03CurrentAgent extends BaseAgent {
+  id: AgentId = 'AG-03-CURRENT'
+  name = '現状サイト多角的分析'
+  protected modelType = 'quality' as const
+  getPrompt(_ctx: ProjectContext): string { return loadPrompt('ag-03-current') }
+  parseOutput(raw: string): AgentOutput { return this.fallbackOutput(raw) }
+}
+```
+
+### 8-2. types.ts に追加
+
+```typescript
+| 'AG-03-CURRENT'
+```
+
+### 8-3. base-agent.ts に max_tokens を追加
+
+```typescript
+'AG-03-CURRENT': 8192,
+```
+
+### 8-4. pipeline.ts に case を追加
+
+```typescript
+import { Ag03CurrentAgent } from '@/agents/ag-03-current'
+// switch に追加
+case 'AG-03-CURRENT': agent = new Ag03CurrentAgent(); break
+```
+
+入力マッピング（getInputsForAgent）：
+
+```typescript
+case 'AG-03-CURRENT': return [
+  s('url',      '現状サイトURL',        String((p as any).currentSiteUrl ?? '')),
+  s('target',   'ターゲット定義',       JSON.stringify((p as any).targetDefinition ?? (p as any).targeting ?? '').slice(0, 400)),
+  s('criteria', '比較軸',              JSON.stringify((p as any).decisionCriteria ?? []).slice(0, 400)),
+  s('barriers', '心理的競合',          JSON.stringify((p as any).layer3_psychological ?? []).slice(0, 300)),
+]
+```
+
+### 8-5. resume/route.ts に組み込む
+
+Phase 1 の AG-03クラスターに AG-03-CURRENT を追加。
+**実行条件：inputPattern が B または C の時のみ実行する。**
+
+```typescript
+// AG-01の出力から inputPattern を取得（既存の runDataAgent 判定の近くに追加）
+const ag01Json = safeParseJson(ag01Result?.results?.[0]?.outputJson)
+const runDataAgent    = ag01Json?.inputPattern === 'C'
+const runCurrentAgent = ag01Json?.inputPattern === 'B' || ag01Json?.inputPattern === 'C'
+
+// Phase 1: AG-03クラスター並列
+const ag03Promises = [
+  run('AG-03',              'AG-03 競合特定・ポジション'),
+  run('AG-03-HEURISTIC',    'AG-03-HEURISTIC ヒューリスティック評価①'),
+  run('AG-03-HEURISTIC2',   'AG-03-HEURISTIC2 ヒューリスティック評価②'),
+  run('AG-03-GAP',          'AG-03-GAP コンテンツギャップ'),
+]
+if (runDataAgent)    ag03Promises.push(run('AG-03-DATA',    'AG-03-DATA GA4・SC分析'))
+if (runCurrentAgent) ag03Promises.push(run('AG-03-CURRENT', 'AG-03-CURRENT 現状サイト8軸分析'))
+const ag03Results = await Promise.all(ag03Promises)
+```
+
+### 8-6. PIPELINE_AGENTS リストに追加（AG-03-DATA の後）
+
+```typescript
+{ id: 'AG-03-CURRENT', label: '現状サイト分析' },
+```
+
+コミット: `feat: AG-03-CURRENT 現状サイト8軸分析を追加（リニューアル案件のみ実行）`
+
+---
+
+## Task 9：pipeline.ts の JSON クリーニング修正【バグ修正】
+
+### 問題
+AG-07C-4 など一部のAGが ` ```json ... ``` ` コードフェンス付きで出力した場合、
+`outputJson` にそのまま保存されてUIの表示が失敗する。
+
+### 修正
+`src/lib/pipeline.ts` の `rawText` を保存する前に、コードフェンスを除去して
+クリーンなJSONだけを `outputJson` に保存するよう修正する。
+
+**この修正はすでに `src/lib/pipeline.ts` に適用済み（`cleanedText` 変数を使用）。**
+確認のみ：
+
+```typescript
+// 以下の変数と処理が存在することを確認する
+let cleanedText = ''
+// ...
+const fenceMatch = rawText.match(/```(?:json)?\s*([\s\S]*?)```/)
+if (fenceMatch) {
+  cleanedText = fenceMatch[1].trim()
+} else {
+  const jsonStart = rawText.search(/[\[{]/)
+  const jsonEnd   = Math.max(rawText.lastIndexOf('}'), rawText.lastIndexOf(']'))
+  cleanedText = (jsonStart !== -1 && jsonEnd > jsonStart)
+    ? rawText.slice(jsonStart, jsonEnd + 1)
+    : rawText.trim()
+}
+// 保存時
+outputJson: cleanedText || rawText
+```
+
+もし適用されていない場合は上記を `runAgentStep` 内の `agentResult.create` の直前に追加する。
+
+コミット: `fix: pipeline.ts で outputJson 保存前にコードフェンスを除去`
+
