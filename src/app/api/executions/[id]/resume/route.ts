@@ -189,8 +189,9 @@ export async function POST(
           const ag02Merge = await run('AG-02-MERGE', 'AG-02-MERGE 市場分析統合')
           newOutputs.push(ag02Merge)
 
-          const ag02Validate = await run('AG-02-VALIDATE', 'AG-02-VALIDATE ターゲット設計検証')
-          newOutputs.push(ag02Validate)
+          // AG-02-VALIDATE: MVP段階はスキップ（スポット実行で使用可）
+          // const ag02Validate = await run('AG-02-VALIDATE', 'AG-02-VALIDATE ターゲット設計検証')
+          // newOutputs.push(ag02Validate)
 
           send({ type: 'status', message: 'AG-03 競合分析クラスター実行中（並列）...' })
 
@@ -225,7 +226,7 @@ export async function POST(
           if (fb02 || fb02Stp || fb02Journey || fb02Vpc || fb02Pos) {
             await feedbackCheck('AG-02-MERGE', 'AG-02-MERGE 市場分析統合', MERGE_RERUN_NOTE)
           }
-          await feedbackCheck('AG-02-VALIDATE', 'AG-02-VALIDATE ターゲット設計検証')
+          // await feedbackCheck('AG-02-VALIDATE', 'AG-02-VALIDATE ターゲット設計検証') // MVP段階スキップ
 
           const [fb03, fb03H, fb03H2, fb03Gap] = await Promise.all([
             feedbackCheck('AG-03',            'AG-03 競合分析'),

@@ -1,6 +1,9 @@
 import { BaseAgent } from './base-agent'
-import { AgentId, AgentOutput, ProjectContext } from './types'
+import { AgentId, AgentInput, AgentOutput, ProjectContext } from './types'
 import { loadPrompt } from '@/lib/prompt-loader'
+import { callClaude } from '@/lib/anthropic-client'
+
+const TIMEOUT_MS = 90_000 // 90秒で強制終了
 
 export class Ag02ValidateAgent extends BaseAgent {
   id: AgentId = 'AG-02-VALIDATE'
@@ -9,6 +12,39 @@ export class Ag02ValidateAgent extends BaseAgent {
 
   getPrompt(_ctx: ProjectContext): string {
     return loadPrompt('ag-02-validate')
+  }
+
+  async execute(input: AgentInput): Promise<AgentOutput> {
+    const t0 = Date.now()
+    console.log('[AG-02-VALIDATE] 開始 — decisionCriteria上位3件を検索5回以内で検証')
+
+    const system = this.getPrompt(input.projectContext)
+    const user = this.buildUserMessage(input)
+
+    const timeout = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('AG-02-VALIDATE タイムアウト（90秒）')), TIMEOUT_MS)
+    )
+
+    try {
+      const raw = await Promise.race([
+        callClaude(system, user, { modelType: 'quality', maxTokens: 4096, enableWebSearch: true }),
+        timeout,
+      ])
+      const elapsed = ((Date.now() - t0) / 1000).toFixed(1)
+      console.log(`[AG-02-VALIDATE] 完了 — ${elapsed}s`)
+      this.lastRawText = raw
+      return this.parseOutput(raw)
+    } catch (err) {
+      const elapsed = ((Date.now() - t0) / 1000).toFixed(1)
+      console.warn(`[AG-02-VALIDATE] 失敗/タイムアウト — ${elapsed}s: ${err instanceof Error ? err.message : err}`)
+      // タイムアウト時はスキップ扱いで空出力を返す
+      return {
+        agentId: this.id,
+        sections: [{ id: 'skipped', title: 'ターゲット設計検証（スキップ）', content: 'タイムアウトのためスキップしました', sectionType: 'text', isEditable: false, canRegenerate: true }],
+        visualizations: [],
+        metadata: { confidence: 'low', factBasis: [], assumptions: [], missingInfo: [] },
+      }
+    }
   }
 
   parseOutput(raw: string): AgentOutput {
