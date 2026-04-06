@@ -26,9 +26,8 @@ const AG_MAX_TOKENS: Record<string, number> = {
   'AG-04-INSIGHT':  16384,
   'AG-04-MERGE':    16384,
   // AG-05〜07
-  'AG-05': 8192,
   'AG-05': 16384,
-  'AG-06': 32768,  // 設計草案は出力量が多いため拡張
+  'AG-06': 32768,
   'AG-07': 16384,
   'AG-07A': 16384,
   'AG-07B': 16384,
@@ -39,6 +38,15 @@ const AG_MAX_TOKENS: Record<string, number> = {
   'AG-07C-3': 6144,
   'AG-07C-4': 4096,
 }
+
+// web_search を有効にするエージェント
+// AG-01-RESEARCH は独自 execute() を持つため除外
+const AG_USES_WEB_SEARCH = new Set([
+  'AG-03',
+  'AG-03-HEURISTIC',
+  'AG-03-HEURISTIC2',
+  'AG-05',
+])
 
 export abstract class BaseAgent {
   abstract id: AgentId
@@ -54,7 +62,12 @@ export abstract class BaseAgent {
     const system = this.getPrompt(input.projectContext)
     const user = this.buildUserMessage(input)
     const maxTokens = AG_MAX_TOKENS[this.id]
-    this.lastRawText = await callClaude(system, user, this.modelType, maxTokens)
+    const enableWebSearch = AG_USES_WEB_SEARCH.has(this.id)
+    this.lastRawText = await callClaude(system, user, {
+      modelType: this.modelType,
+      maxTokens,
+      enableWebSearch,
+    })
     return this.parseOutput(this.lastRawText)
   }
 
