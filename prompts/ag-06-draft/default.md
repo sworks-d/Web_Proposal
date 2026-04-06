@@ -128,6 +128,17 @@ AG-04の `coreProblemStatements` をもとに提案軸を2〜3案立案する。
 
 ## Output Format
 
+## 出力サイズの制約（必ず守ること）
+
+JSON出力が長くなりすぎるとmax_tokensで途中切れが起きる。以下を厳守する：
+
+- `proposalAxes` は最大3軸
+- `siteMap` のページ数は最大15ページ
+- `pageStructure` は最大8ページ（最重要ページのみ）
+- 各ページの `contentElements` は最大5件
+- `visualizations` は2つまで
+- 各フィールドのテキストは100字以内
+
 必ず以下のJSON形式のみで出力してください。説明文・前置き・コードフェンスは不要です。
 
 {
