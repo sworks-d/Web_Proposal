@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Ticker from '@/components/layout/Ticker'
+import { CHANGELOG } from '@/lib/changelog'
 import NavBar from '@/components/layout/NavBar'
 
 const INDUSTRY_OPTIONS = [
@@ -54,6 +55,7 @@ export default function HomePage() {
   const router = useRouter()
   const [projects, setProjects] = useState<Project[]>([])
   const [showModal, setShowModal] = useState(false)
+  const [changelogOpen, setChangelogOpen] = useState(false)
   const [clientName, setClientName] = useState('')
   const [title, setTitle] = useState('')
   const [industryType, setIndustryType] = useState('recruitment')
@@ -198,6 +200,67 @@ export default function HomePage() {
             <span style={{ width: '15px', height: '15px', border: '1.5px solid rgba(252,251,239,0.45)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', lineHeight: 1 }}>+</span>
             新規案件を作成
           </button>
+
+          {/* CHANGELOG */}
+          <div style={{ borderTop: '1px solid var(--line2)', paddingTop: '16px' }}>
+            <button
+              onClick={() => setChangelogOpen(p => !p)}
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                width: '100%', background: 'transparent', border: 'none', cursor: 'pointer',
+                padding: '0', marginBottom: changelogOpen ? '14px' : '0',
+              }}
+            >
+              <span style={{ fontFamily: 'var(--font-d)', fontSize: '8px', fontWeight: 700, letterSpacing: '0.18em', textTransform: 'uppercase', color: 'var(--ink3)' }}>
+                CHANGELOG
+              </span>
+              <span style={{ fontFamily: 'var(--font-d)', fontSize: '9px', color: 'var(--ink3)', transition: 'transform 0.2s', display: 'inline-block', transform: changelogOpen ? 'rotate(180deg)' : 'rotate(0deg)' }}>▾</span>
+            </button>
+            {changelogOpen && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
+                {CHANGELOG.map((entry, i) => (
+                  <div
+                    key={entry.version}
+                    style={{
+                      borderTop: i > 0 ? '1px solid var(--line)' : '1px solid var(--line)',
+                      padding: '10px 0',
+                    }}
+                  >
+                    {/* ヘッダー：バージョン + 日付 + タグ */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '5px', flexWrap: 'wrap' }}>
+                      <span style={{ fontFamily: 'var(--font-d)', fontSize: '9px', fontWeight: 700, letterSpacing: '0.08em', color: 'var(--ink)' }}>
+                        {entry.version}
+                      </span>
+                      <span style={{ fontFamily: 'var(--font-c)', fontSize: '10px', color: 'var(--ink3)' }}>
+                        {entry.date}
+                      </span>
+                      {entry.tags.map(tag => (
+                        <span key={tag} style={{
+                          fontFamily: 'var(--font-d)', fontSize: '7.5px', fontWeight: 700,
+                          letterSpacing: '0.06em', padding: '2px 6px',
+                          border: '1px solid var(--line2)', color: 'var(--ink3)',
+                        }}>
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+                    {/* タイトル */}
+                    <div style={{ fontFamily: 'var(--font-c)', fontSize: '11.5px', color: 'var(--ink)', marginBottom: '6px', lineHeight: 1.4 }}>
+                      {entry.title}
+                    </div>
+                    {/* 更新内容リスト */}
+                    <ul style={{ margin: 0, paddingLeft: '12px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                      {entry.items.map((item, j) => (
+                        <li key={j} style={{ fontFamily: 'var(--font-c)', fontSize: '10.5px', color: 'var(--ink2)', lineHeight: 1.5 }}>
+                          {item}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
