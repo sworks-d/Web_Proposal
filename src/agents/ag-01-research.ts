@@ -16,19 +16,32 @@ export class Ag01ResearchAgent extends BaseAgent {
     const system = this.getPrompt(input.projectContext)
     const user = this.buildUserMessage(input)
 
-    type Msg = { role: 'user' | 'assistant'; content: string }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    type Msg = { role: 'user' | 'assistant'; content: any }
     const messages: Msg[] = [{ role: 'user', content: user }]
     let fullText = ''
 
+    console.log(`[AG-01-RESEARCH] 開始 — web_search max_uses=10`)
+    const t0 = Date.now()
+
     for (let i = 0; i < 4; i++) {
+      console.log(`[AG-01-RESEARCH] API呼び出し #${i + 1} 開始`)
+      const tCall = Date.now()
+
       const res = await anthropic.messages.create({
         model: 'claude-sonnet-4-6',
         max_tokens: 8192,
         system,
         messages,
+        // web_search_20260209 はサーバーサイドツール（Anthropic が自動実行）
+        // max_uses は初回のみ渡す（continuation では tools を渡さない）
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        tools: i === 0 ? [{ type: 'web_search_20260209' as any, name: 'web_search', max_uses: 30 }] : [],
+        ...(i === 0 ? { tools: [{ type: 'web_search_20260209' as any, name: 'web_search', max_uses: 10 }] } : {}),
       })
+
+      const elapsed = ((Date.now() - tCall) / 1000).toFixed(1)
+      const searchCount = res.content.filter(b => b.type === 'server_tool_use').length
+      console.log(`[AG-01-RESEARCH] API呼び出し #${i + 1} 完了 — ${elapsed}s, stop_reason=${res.stop_reason}, 検索数=${searchCount}`)
 
       const chunk = res.content
         .filter(b => b.type === 'text')
@@ -39,9 +52,12 @@ export class Ag01ResearchAgent extends BaseAgent {
 
       if (res.stop_reason !== 'max_tokens') break
 
-      messages.push({ role: 'assistant', content: chunk })
+      // max_tokens 継続: full content を assistant メッセージとして渡す（tool_use ブロックを保持）
+      messages.push({ role: 'assistant', content: res.content })
       messages.push({ role: 'user', content: '前回の続きをそのまま出力してください。前置き・説明・重複は不要です。' })
     }
+
+    console.log(`[AG-01-RESEARCH] 完了 — 合計 ${((Date.now() - t0) / 1000).toFixed(1)}s`)
 
     this.lastRawText = fullText
     return this.parseOutput(fullText)
