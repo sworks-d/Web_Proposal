@@ -1,11 +1,26 @@
 'use client'
 import Link from 'next/link'
+import { useState } from 'react'
 
 interface NavBarProps {
   context?: string
 }
 
 export default function NavBar({ context }: NavBarProps) {
+  const [stopping, setStopping] = useState(false)
+  const [stopped, setStopped] = useState(false)
+
+  const handleStopAll = async () => {
+    if (stopping) return
+    setStopping(true)
+    try {
+      await fetch('/api/executions/stop-all', { method: 'POST' })
+      setStopped(true)
+      setTimeout(() => setStopped(false), 3000)
+    } catch {}
+    setStopping(false)
+  }
+
   return (
     <nav style={{
       padding: '16px 44px',
@@ -53,7 +68,7 @@ export default function NavBar({ context }: NavBarProps) {
         </span>
       )}
 
-      <div style={{ display: 'flex', gap: '24px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
         {['Cases', 'Settings'].map(label => (
           <Link key={label} href="/" style={{
             fontFamily: 'var(--font-d)',
@@ -67,6 +82,27 @@ export default function NavBar({ context }: NavBarProps) {
             {label}
           </Link>
         ))}
+        <button
+          onClick={handleStopAll}
+          disabled={stopping}
+          style={{
+            fontFamily: 'var(--font-d)',
+            fontSize: '8px',
+            fontWeight: 700,
+            letterSpacing: '0.14em',
+            textTransform: 'uppercase',
+            padding: '6px 14px',
+            border: `1px solid ${stopped ? 'var(--dot-g)' : 'var(--red)'}`,
+            background: 'transparent',
+            color: stopped ? 'var(--dot-g)' : 'var(--red)',
+            cursor: stopping ? 'not-allowed' : 'pointer',
+            borderRadius: '2px',
+            opacity: stopping ? 0.5 : 1,
+            transition: 'color 0.2s, border-color 0.2s',
+          }}
+        >
+          {stopped ? '✓ 停止済み' : stopping ? '停止中...' : '■ 全停止'}
+        </button>
       </div>
     </nav>
   )

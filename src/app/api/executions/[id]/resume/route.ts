@@ -4,7 +4,7 @@ import { runAgentStep, setVersionStatus, getVersionOutputs } from '@/lib/pipelin
 import { safeParseJson } from '@/lib/json-cleaner'
 import { detectFeedbackTarget, extractAG05Targets } from '@/lib/auto-feedback'
 import { PipelineConfig, ProjectContext, AgentOutput, AgentId } from '@/agents/types'
-import { isStopRequested, clearStop } from '@/lib/execution-control'
+import { isStopRequested, clearStop, clearStopAll } from '@/lib/execution-control'
 
 export const maxDuration = 600 // 10分
 
@@ -100,8 +100,9 @@ export async function POST(
       const send = (event: unknown) =>
         controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`))
 
-      // 停止フラグをクリアしてから開始
+      // 停止フラグをクリアしてから開始（グローバル含む）
       clearStop(versionId)
+      clearStopAll()
 
       // 完了済みならスキップ、未完了なら実行して previousOutputs に追加
       const run = async (agentId: AgentId, label: string): Promise<AgentOutput> => {
@@ -377,6 +378,7 @@ export async function POST(
         clearStop(versionId)
         controller.close()
       }
+
     },
   })
 
