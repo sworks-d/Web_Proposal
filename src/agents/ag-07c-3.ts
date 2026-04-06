@@ -2,6 +2,20 @@ import { BaseAgent } from './base-agent'
 import { AgentId, AgentInput, AgentOutput, ProjectContext } from './types'
 import { loadPrompt } from '@/lib/prompt-loader'
 
+function detectEvidenceDuplication(slides: Array<Record<string, unknown>>): string[] {
+  const warnings: string[] = []
+  const seenFacts = new Set<string>()
+  for (const slide of slides) {
+    for (const ev of (slide.evidence as Array<{ fact?: string }>) ?? []) {
+      const key = ev.fact?.trim().slice(0, 40)
+      if (!key) continue
+      if (seenFacts.has(key)) warnings.push(`スライド ${slide.slideId ?? '?'}: evidence "${key}..." が他スライドと重複`)
+      else seenFacts.add(key)
+    }
+  }
+  return warnings
+}
+
 export class Ag07c3Agent extends BaseAgent {
   id: AgentId = 'AG-07C-3'
   name = '素材セット Ch.05〜06'
@@ -63,7 +77,7 @@ export class Ag07c3Agent extends BaseAgent {
           confidence: (p.confidence as 'high' | 'medium' | 'low') ?? 'medium',
           factBasis: (p.factBasis as string[]) ?? [],
           assumptions: [],
-          missingInfo: [],
+          missingInfo: detectEvidenceDuplication((p.slides as Array<Record<string, unknown>>) ?? []),
         },
       }
     } catch {

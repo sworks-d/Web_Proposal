@@ -41,26 +41,32 @@ type CheckpointState = {
 } | null
 
 const AG_LIST = [
-  { id: 'AG-01',            name: 'インテーク担当',             badge: '01' },
-  { id: 'AG-02',            name: '市場骨格分析',               badge: '02' },
-  { id: 'AG-02-STP',        name: 'STPセグメンテーション',      badge: 'STP' },
-  { id: 'AG-02-JOURNEY',    name: 'カスタマージャーニー',       badge: 'JNY' },
-  { id: 'AG-02-VPC',        name: 'バリュープロポジション',     badge: 'VPC' },
-  { id: 'AG-02-MERGE',      name: '市場分析統合',               badge: 'M02' },
-  { id: 'AG-03',            name: '競合特定・ポジション',       badge: '03' },
+  { id: 'AG-01',            name: 'インテーク担当',               badge: '01' },
+  { id: 'AG-01-RESEARCH',   name: '会社情報リサーチ',             badge: 'RES' },
+  { id: 'AG-01-MERGE',      name: 'インテーク統合',               badge: '1M' },
+  { id: 'AG-02',            name: '市場骨格分析',                 badge: '02' },
+  { id: 'AG-02-STP',        name: 'STPセグメンテーション',        badge: 'STP' },
+  { id: 'AG-02-JOURNEY',    name: 'カスタマージャーニー',         badge: 'JNY' },
+  { id: 'AG-02-VPC',        name: 'バリュープロポジション',       badge: 'VPC' },
+  { id: 'AG-02-POSITION',   name: '4軸ポジショニング',            badge: 'POS' },
+  { id: 'AG-02-MERGE',      name: '市場分析統合',                 badge: 'M02' },
+  { id: 'AG-03',            name: '競合特定・ポジション',         badge: '03' },
   { id: 'AG-03-HEURISTIC',  name: 'ヒューリスティック（上位2社）', badge: 'H1' },
   { id: 'AG-03-HEURISTIC2', name: 'ヒューリスティック（残競合）', badge: 'H2' },
-  { id: 'AG-03-GAP',        name: 'コンテンツギャップ',         badge: 'GAP' },
-  { id: 'AG-03-DATA',       name: 'GA4・SC分析',                badge: 'DAT' },
-  { id: 'AG-03-MERGE',      name: '競合分析統合',               badge: 'M03' },
-  { id: 'AG-04-MAIN',       name: '5Whys・HMW',                 badge: '4M' },
-  { id: 'AG-04',            name: 'インサイト・JTBD',           badge: '04' },
-  { id: 'AG-04-MERGE',      name: '課題定義統合',               badge: 'M04' },
-  { id: 'AG-05',            name: 'ファクトチェック',           badge: '05' },
-  { id: 'AG-06',            name: '設計草案',                   badge: '06' },
-  { id: 'AG-07A',           name: '設計根拠ライター',           badge: '7A' },
-  { id: 'AG-07B',           name: 'リファレンス戦略',           badge: '7B' },
-  { id: 'AG-07C',           name: '提案書草案',                 badge: '7C' },
+  { id: 'AG-03-GAP',        name: 'コンテンツギャップ',           badge: 'GAP' },
+  { id: 'AG-03-DATA',       name: 'GA4・SC分析',                  badge: 'DAT' },
+  { id: 'AG-03-MERGE',      name: '競合分析統合',                 badge: 'M03' },
+  { id: 'AG-04-MAIN',       name: '5Whys・HMW',                   badge: '4M' },
+  { id: 'AG-04-INSIGHT',    name: 'インサイト・JTBD',             badge: '04' },
+  { id: 'AG-04-MERGE',      name: '課題定義統合',                 badge: 'M04' },
+  { id: 'AG-05',            name: 'ファクトチェック',             badge: '05' },
+  { id: 'AG-06',            name: '設計草案',                     badge: '06' },
+  { id: 'AG-07A',           name: '設計根拠ライター',             badge: '7A' },
+  { id: 'AG-07B',           name: 'リファレンス戦略',             badge: '7B' },
+  { id: 'AG-07C-1',         name: '素材セット Ch.01-02',          badge: 'C1' },
+  { id: 'AG-07C-2',         name: '素材セット Ch.03-04',          badge: 'C2' },
+  { id: 'AG-07C-3',         name: '素材セット Ch.05-06',          badge: 'C3' },
+  { id: 'AG-07C-4',         name: '素材サマリー',                 badge: 'C4' },
 ]
 
 const PHASE_LABELS = ['インテーク', '市場分析', '競合分析', '統合・FC', '設計・草案']
@@ -493,6 +499,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
             const isActive = currentAG === ag.id && !isDone
             const isSelected = selectedAGId === ag.id
             const isPending = !isDone && !isActive
+            const hasDedup = isDone && hasDedupWarning(versionExecutions, ag.id)
 
             return (
               <div
@@ -507,16 +514,21 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
                 }}
               >
                 {(isActive || isSelected) && <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: '2px', background: isSelected ? 'var(--red)' : 'var(--red)' }} />}
-                <div style={{
-                  width: '32px', height: '32px',
-                  border: `1px solid ${isDone ? 'var(--ink)' : isActive ? 'var(--red)' : 'var(--line2)'}`,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontFamily: 'var(--font-d)', fontSize: isDone ? '12px' : '9px', fontWeight: 700,
-                  color: isDone ? 'var(--bg)' : isActive ? '#fff' : 'var(--ink3)',
-                  flexShrink: 0, borderRadius: '2px',
-                  background: isDone ? 'var(--ink)' : isActive ? 'var(--red)' : 'transparent',
-                }}>
-                  {isDone ? '✓' : ag.badge}
+                <div style={{ position: 'relative', flexShrink: 0 }}>
+                  <div style={{
+                    width: '32px', height: '32px',
+                    border: `1px solid ${isDone ? 'var(--ink)' : isActive ? 'var(--red)' : 'var(--line2)'}`,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontFamily: 'var(--font-d)', fontSize: isDone ? '12px' : '9px', fontWeight: 700,
+                    color: isDone ? 'var(--bg)' : isActive ? '#fff' : 'var(--ink3)',
+                    borderRadius: '2px',
+                    background: isDone ? 'var(--ink)' : isActive ? 'var(--red)' : 'transparent',
+                  }}>
+                    {isDone ? '✓' : ag.badge}
+                  </div>
+                  {hasDedup && (
+                    <span title="重複出力の可能性" style={{ position: 'absolute', top: '-4px', right: '-4px', fontSize: '9px', color: '#E8A020', lineHeight: 1 }}>⚠</span>
+                  )}
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontFamily: 'var(--font-c)', fontSize: '9px', color: 'var(--ink3)', letterSpacing: '0.07em', marginBottom: '3px' }}>{ag.id}</div>
@@ -680,6 +692,12 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
       )}
     </div>
   )
+}
+
+function hasDedupWarning(executions: VersionExecution[], agentId: string): boolean {
+  const exec = executions.filter(e => e.agentId === agentId && e.status === 'COMPLETED').at(-1)
+  const msg = exec?.results[0]?.parseErrorMessage
+  return typeof msg === 'string' && msg.includes('[DEDUP]')
 }
 
 function statusLabel(s: string) {

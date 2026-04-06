@@ -56,6 +56,42 @@ function createAg02Agent(primaryId: string): Ag02BaseAgent {
   return factory ? factory() : new Ag02GeneralAgent()
 }
 
+const FORBIDDEN_REUSE: Record<string, string[]> = {
+  'AG-03-MERGE': ['siteDesignPrinciples'],
+  'AG-04-MERGE': ['siteDesignPrinciples', 'coreProblemStatement'],
+  'AG-07A':      ['siteDesignPrinciples'],
+  'AG-07C-1': [], 'AG-07C-2': [], 'AG-07C-3': [], 'AG-07C-4': [],
+}
+
+function checkDuplication(
+  agentId: string,
+  currentOutput: Record<string, unknown>,
+  prevFields: Record<string, unknown>
+): string | null {
+  const forbidden = FORBIDDEN_REUSE[agentId]
+  if (!forbidden) return null
+
+  const warnings: string[] = []
+
+  for (const field of forbidden) {
+    if (field in currentOutput && field in prevFields) {
+      if (JSON.stringify(currentOutput[field]) === JSON.stringify(prevFields[field])) {
+        warnings.push(`[DEDUP] ${agentId}: フィールド "${field}" が前段AGの出力と完全一致しています。再出力の可能性があります。`)
+      }
+    }
+  }
+
+  if (agentId.startsWith('AG-07C')) {
+    const outputStr = JSON.stringify(currentOutput)
+    const internalRefs = outputStr.match(/AG-\d{2}[A-Z0-9-]*の/g) ?? []
+    if (internalRefs.length > 0) {
+      warnings.push(`[DEDUP] ${agentId}: body_draft に内部参照が残っています: ${[...new Set(internalRefs)].join(', ')}`)
+    }
+  }
+
+  return warnings.length > 0 ? warnings.join('\n') : null
+}
+
 export async function runAgentStep(
   versionId: string,
   agentId: AgentId,
@@ -140,9 +176,36 @@ export async function runAgentStep(
     throw err
   }
 
+  // 保存前の重複チェック
+  let dedupWarning: string | null = null
+  try {
+    if (rawText && FORBIDDEN_REUSE[agentId] !== undefined) {
+      const currentParsed = JSON.parse(rawText)
+      const prevExecs = await prisma.execution.findMany({
+        where: { versionId, status: 'COMPLETED', agentId: { not: agentId } },
+        include: { results: { take: 1, orderBy: { id: 'desc' } } },
+      })
+      const prevFields: Record<string, unknown> = {}
+      for (const exec of prevExecs) {
+        const result = exec.results[0]
+        if (!result?.outputJson) continue
+        try { Object.assign(prevFields, JSON.parse(result.outputJson)) } catch { /* ignore */ }
+      }
+      dedupWarning = checkDuplication(agentId, currentParsed, prevFields)
+    }
+  } catch { /* dedup失敗は無視 */ }
+
   // 保存・完了処理
   await prisma.agentResult.create({
-    data: { executionId: execution.id, agentId, outputJson: cleanedText || rawText, parseError, parseErrorMessage },
+    data: {
+      executionId: execution.id,
+      agentId,
+      outputJson: cleanedText || rawText,
+      parseError,
+      parseErrorMessage: dedupWarning
+        ? `${parseErrorMessage ?? ''}\n${dedupWarning}`.trim()
+        : parseErrorMessage,
+    },
   })
   await prisma.execution.update({
     where: { id: execution.id },

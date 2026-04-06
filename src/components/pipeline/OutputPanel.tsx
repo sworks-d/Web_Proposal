@@ -27,7 +27,7 @@ export interface VersionExecution {
   id: string
   agentId: string
   status: string
-  results: { id: string; outputJson: string; editedJson?: string | null }[]
+  results: { id: string; outputJson: string; editedJson?: string | null; parseErrorMessage?: string | null }[]
 }
 
 const AG_LABELS: Record<string, string> = {
