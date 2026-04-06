@@ -5,6 +5,7 @@ import { renderAgentOutput, renderParseError } from '@/lib/output-renderer'
 import { OutputSectionRenderer } from '@/components/preview/OutputSectionRenderer'
 import { GotInfoItem, MissingInfoItem } from '@/lib/checkpoint-summary'
 import { CheckpointInlineSection } from '@/components/checkpoint/CheckpointInlineSection'
+import { ChartRenderer } from '@/components/pipeline/ChartRenderer'
 
 function ElapsedTimer({ running }: { running: boolean }) {
   const [secs, setSecs] = useState(0)
@@ -256,6 +257,13 @@ export function OutputPanel({
             {isSelected && (
               <div style={{ borderTop: '1px solid var(--line)' }}>
                 <OutputSectionRenderer sections={sections} />
+                {parsed?.chartData && (
+                  <div style={{ padding: '0 40px 24px' }}>
+                    {Object.entries(parsed.chartData as Record<string, Record<string, unknown>>).map(([key, chart]) => (
+                      <ChartRenderer key={key} data={chart as Parameters<typeof ChartRenderer>[0]['data']} />
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </div>
