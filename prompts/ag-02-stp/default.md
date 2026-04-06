@@ -137,7 +137,30 @@ secondarySegmentも定義する：
 
 軸は2つ設定する。3つ以上はポジショニングが曖昧になる。
 
-### Task 5：designImplicationを書く
+### Task 5：ターゲット検証（web_search使用）
+
+定義したprimarySegmentのdecisionCriteriaとpainPointsを検索で検証する。
+
+採用案件の場合：
+  - "{業界名} 転職 理由"
+  - "{職種名} キャリア 悩み"
+  - "{業界名} 採用サイト 見にくい" / "{業界名} 応募 ためらい"
+
+BtoB案件の場合：
+  - "{サービスカテゴリ} 比較 選び方"
+  - "{課題名} 解決方法"
+
+EC案件の場合：
+  - "{商品カテゴリ} 選び方 口コミ"
+  - "{商品カテゴリ} 比較 おすすめ"
+
+全案件共通（decisionCriteria検証）：
+  - "{業界/サービス} 比較 選び方"
+  - "{業界} 選ぶ基準"
+
+検証結果は targetValidation フィールドに記録する。
+
+### Task 6：designImplicationを書く
 
 STP分析の最重要アウトプット。
 「だからサイト設計はこうなる」という接続を書く。
@@ -248,6 +271,31 @@ JSONのみ。コードフェンス・説明文・前置き不要。
     "iaChange": "primarySegmentを優先することでページ構成が具体的にどう変わるか",
     "firstViewDesign": "targetPositionを表現するファーストビューで何を見せるか",
     "differentiationReason": "このポジショニングが競合と差別化される理由"
+  },
+  "targetValidation": {
+    "searchQueries": ["実行した検索クエリ"],
+    "confirmedPainPoints": [
+      {
+        "painPoint": "確認できた悩み・ニーズ",
+        "evidence": "どの検索結果から",
+        "frequency": "high|medium|low"
+      }
+    ],
+    "confirmedDecisionCriteria": [
+      {
+        "criterion": "確認できた比較軸",
+        "evidence": "どの検索結果から",
+        "priority": "high|medium|low"
+      }
+    ],
+    "targetLanguage": [
+      {
+        "ourTerm": "我々が使う言葉",
+        "theirTerm": "ターゲットが使う言葉",
+        "source": "どの検索結果から",
+        "usage": "ナビラベル|見出し|CTA|SEO"
+      }
+    ]
   },
   "confidence": "high|medium|low",
   "factBasis": ["根拠（実際のサイト確認・AG-02-MAINのデータ）"],

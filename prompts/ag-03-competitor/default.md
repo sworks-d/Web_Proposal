@@ -177,7 +177,22 @@ AG-04-INSIGHTのsearchIntentAnalysisがあれば優先して使う。
   - competitorResponse：Layer 1の競合でこの軸に最もよく答えているサイト
   - designOpportunity：この軸でクライアントが差別化できる設計
 
-### Task 6：ポジショニングマップを作成する
+### Task 6：decisionCriteria の検索検証（web_search使用）
+
+Task 5 で定義した比較軸（weight=high の軸を優先）を検索で検証する。
+
+使用するクエリ：
+  - "{業界/サービス} 比較 選び方"
+  - "{サービスカテゴリ} 比較表"
+  - "{会社名} vs {競合名}"
+  - "{サービス名} メリット デメリット"
+
+検証結果：
+  - 実際に使われている比較軸を追加
+  - 検索で言及されない軸の weight を low に引き下げ
+  - 各軸の言及頻度（high/medium/low/none）を decisionCriteriaValidation に記録
+
+### Task 7：ポジショニングマップを作成する
 
 Layer 1の直接競合を対象に2軸のポジショニングマップを作成する。
 軸はdecisionCriteriaの中から「競合間で差が最もある2軸」を選ぶ。
@@ -298,6 +313,16 @@ JSONのみ。コードフェンス・説明文・前置き不要。
 
   "forHeuristic": "AG-03-HEURISTICに渡すLayer1の優先評価対象と着眼点",
   "forGap": "AG-03-GAPに渡すLayer2〜4の競合に対して特に分析すべきコンテンツGAP",
+
+  "decisionCriteriaValidation": [
+    {
+      "criterion": "比較軸名",
+      "mentionFrequency": "high|medium|low|none",
+      "searchQuery": "検証に使った検索クエリ",
+      "searchEvidence": "検索結果で見つかった言及",
+      "adjustedWeight": "high|medium|low"
+    }
+  ],
 
   "confidence": "high|medium|low",
   "factBasis": ["根拠（実際のサイト確認・AG-01-RESEARCHのデータ）"],

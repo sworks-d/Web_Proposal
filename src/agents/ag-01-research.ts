@@ -27,7 +27,7 @@ export class Ag01ResearchAgent extends BaseAgent {
         system,
         messages,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        tools: i === 0 ? [{ type: 'web_search_20260209' as any, name: 'web_search', max_uses: 15 }] : [],
+        tools: i === 0 ? [{ type: 'web_search_20260209' as any, name: 'web_search', max_uses: 30 }] : [],
       })
 
       const chunk = res.content

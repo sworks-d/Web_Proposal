@@ -136,7 +136,26 @@ siteRoleは「設計として翻訳できる」レベルで書く。
 抽象的な表現（「魅力を伝える」）は禁止。
 「どのページで・どのコンテンツで・どう体験させるか」まで書く。
 
-### Task 5：keyInsightsを抽出する
+### Task 5：バリアー検証（web_search使用）
+
+定義したバリアーが実際に言及されているかを検索で確認する。
+
+採用案件の場合：
+  - "{会社名} 転職 やめた理由"
+  - "{業界名} 採用サイト 離脱 理由"
+  - "{業界名} 応募 ためらい"
+
+BtoB案件の場合：
+  - "{サービス名} 導入 見送り 理由"
+  - "{サービスカテゴリ} 稟議 通らない"
+
+全案件共通（成功パターン確認）：
+  - "{競合名} サイト わかりやすい 理由"
+  - "{業界名} サイト リニューアル 改善"
+
+検証結果を journeyValidation フィールドに記録する。
+
+### Task 6：keyInsightsを抽出する
 
 全フェーズを通じて気づいた「設計の優先順位」を3つ以内で書く。
 「どのフェーズが最もCVに影響するか」「どのバリアーが最も深刻か」を含める。
@@ -213,6 +232,31 @@ JSONのみ。コードフェンス・説明文・前置き不要。
   "keyInsights": [
     "設計の優先順位と根拠（最大3つ）"
   ],
+
+  "journeyValidation": {
+    "confirmedBarriers": [
+      {
+        "barrier": "確認できたバリアー",
+        "phase": "どのフェーズで発生",
+        "searchEvidence": "どの検索から",
+        "frequency": "high|medium|low"
+      }
+    ],
+    "unconfirmedBarriers": [
+      {
+        "barrier": "確認できなかったバリアー（想定のまま）",
+        "confidence": "low",
+        "note": "検索では言及なし、仮説として扱う"
+      }
+    ],
+    "discoveredBarriers": [
+      {
+        "barrier": "検索で新たに発見したバリアー",
+        "searchEvidence": "どの検索から",
+        "addedToPhase": "どのフェーズに追加"
+      }
+    ]
+  },
 
   "confidence": "high|medium|low",
   "factBasis": ["根拠"],
