@@ -285,6 +285,19 @@ function extractContextSections(agentId: string, p: any): AgentOutput['sections'
       s('concept',     'コンセプトワード',        (p.conceptWords ?? []).slice(0, 2).map((c: any, i: number) => `案${i + 1}: ${c.copy} — ${c.subCopy ?? ''}`).join('\n')),
       s('storyline',   '目次・章構成',            (p.storyLine ?? []).map((ch: any) => `${ch.chapterTitle}: ${ch.keyMessage ?? ''}`).join('\n')),
     ]
+    case 'AG-07C-1':
+    case 'AG-07C-2':
+    case 'AG-07C-3': return [
+      s('slides', `スライド素材（${(p.slides as any[] ?? []).length}枚）`,
+        (p.slides as any[] ?? []).slice(0, 4).map((sl: any) =>
+          `[${sl.slideId}] ${sl.slideTitle ?? ''}\n${String(sl.body_draft ?? '').slice(0, 200)}`
+        ).join('\n---\n')
+      ),
+    ]
+    case 'AG-07C-4': return [
+      s('concept',    'コンセプトワード',  (p.conceptWords as any[] ?? []).slice(0, 3).map((c: any, i: number) => `案${i+1}: ${c.copy} — ${c.subCopy ?? ''}`).join('\n')),
+      s('storyline',  'ストーリーライン',  (p.storyLine as any[] ?? []).map((ch: any) => `${ch.chapterTitle}（${ch.estimatedSlides ?? '?'}枚）: ${ch.keyMessage ?? ''}`).join('\n')),
+    ]
     default: return [s('raw', '出力', JSON.stringify(p).slice(0, 800))]
   }
 }

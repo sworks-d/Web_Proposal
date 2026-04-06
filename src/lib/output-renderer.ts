@@ -560,6 +560,127 @@ export function renderAG07C(json: any): OutputSection[] {
   ]
 }
 
+// AG-07C-1〜3: スライド素材セット（chapter単位）
+export function renderAG07CSlides(json: any): OutputSection[] {
+  const slides: any[] = json.slides ?? []
+  if (slides.length === 0) {
+    return [{ label: 'スライド素材', items: [{ type: 'text', content: '（スライドデータなし）' }] }]
+  }
+  const sections: OutputSection[] = []
+
+  for (const slide of slides) {
+    const catchOpts: any[] = slide.catchCopy_options ?? []
+    const bullets: string[] = slide.bullets ?? []
+    const evidence: any[] = slide.evidence ?? []
+    const vs = slide.visual_spec
+
+    const catchLines = catchOpts.map((c: any) =>
+      `【${c.angle ?? c.id}】${c.copy}`
+    ).join('
+')
+
+    const bulletLines = bullets.map((b: string) => `▸ ${b}`).join('
+')
+
+    const evidenceLines = evidence.slice(0, 3).map((e: any) =>
+      `${e.reliability ?? ''} ${e.fact ?? e.source ?? ''}`
+    ).join('
+')
+
+    const visualLine = vs
+      ? `[${vs.type ?? ''}] ${vs.content ?? ''} / ${vs.caption ?? ''}`
+      : ''
+
+    const bodyText = [
+      slide.body_draft ? slide.body_draft : '',
+      catchLines ? `
+
+▼ キャッチコピー案
+${catchLines}` : '',
+      bulletLines ? `
+
+▼ 箇条書き
+${bulletLines}` : '',
+      evidenceLines ? `
+
+▼ 根拠
+${evidenceLines}` : '',
+      visualLine ? `
+
+▼ ビジュアル指示
+${visualLine}` : '',
+      slide.caveats?.length ? `
+
+▼ 注意点
+${(slide.caveats as string[]).join(' / ')}` : '',
+    ].filter(Boolean).join('')
+
+    sections.push({
+      label: `[${slide.slideId ?? '?'}] ${slide.slideTitle ?? slide.chapterTitle ?? ''}`,
+      items: [{ type: 'text' as const, content: bodyText }]
+    })
+  }
+
+  return sections
+}
+
+// AG-07C-4: サマリー（conceptWords + storyLine + cdSummary）
+export function renderAG07C4(json: any): OutputSection[] {
+  const concepts: any[] = json.conceptWords ?? []
+  const story: any[] = json.storyLine ?? []
+  const cd = json.cdSummary ?? {}
+  const sections: OutputSection[] = []
+
+  if (concepts.length > 0) {
+    sections.push({
+      label: 'コンセプトワード（3案）',
+      confidence: json.confidence,
+      items: concepts.map((c: any) => ({
+        type: 'principle' as const,
+        content: `${c.copy}　—　${c.subCopy ?? ''}`,
+        note: c.rationale,
+      }))
+    })
+  }
+
+  if (story.length > 0) {
+    sections.push({
+      label: `ストーリーライン（全${json.totalSlides ?? '?'}枚構成）`,
+      items: story.map((ch: any) => ({
+        type: 'principle' as const,
+        content: `${ch.chapterTitle}（${ch.estimatedSlides ?? '?'}枚）`,
+        note: `${ch.keyMessage ?? ''} → ${ch.bridgeToNext ?? ''}`,
+      }))
+    })
+  }
+
+  const needsInput: any[] = cd.needsCDInput ?? []
+  if (needsInput.length > 0) {
+    sections.push({
+      label: 'CDが追加・確認する必要がある情報',
+      items: needsInput.slice(0, 8).map((n: any) => ({
+        type: 'warning' as const,
+        content: `[${n.slideId ?? ''}] ${n.what ?? ''}`,
+        note: n.why ?? '',
+      }))
+    })
+  }
+
+  const priority: any[] = cd.priorityReview ?? []
+  if (priority.length > 0) {
+    sections.push({
+      label: '優先確認スライド',
+      items: priority.map((p: any) => ({
+        type: 'text' as const,
+        content: `${p.slideId ?? ''}: ${p.reason ?? ''}`,
+      }))
+    })
+  }
+
+  return sections
+}
+
+
 export function renderParseError(agentId: string, rawText: string): OutputSection[] {
   const preview = rawText.slice(0, 400).trim()
   const isTruncated = rawText.length > 0 && !rawText.trimEnd().endsWith('}') && !rawText.trimEnd().endsWith(']')
@@ -603,6 +724,10 @@ export function renderAgentOutput(agentId: string, json: any | null, rawText?: s
     case 'AG-07A':           return renderAG07A(json)
     case 'AG-07B':           return renderAG07B(json)
     case 'AG-07C':           return renderAG07C(json)
+    case 'AG-07C-1':
+    case 'AG-07C-2':
+    case 'AG-07C-3':         return renderAG07CSlides(json)
+    case 'AG-07C-4':         return renderAG07C4(json)
     default:                 return [{ label: agentId, items: [{ type: 'text', content: JSON.stringify(json, null, 2).slice(0, 800) }] }]
   }
 }
