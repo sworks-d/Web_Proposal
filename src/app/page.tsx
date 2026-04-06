@@ -201,66 +201,6 @@ export default function HomePage() {
             新規案件を作成
           </button>
 
-          {/* CHANGELOG */}
-          <div style={{ borderTop: '1px solid var(--line2)', paddingTop: '16px' }}>
-            <button
-              onClick={() => setChangelogOpen(p => !p)}
-              style={{
-                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                width: '100%', background: 'transparent', border: 'none', cursor: 'pointer',
-                padding: '0', marginBottom: changelogOpen ? '14px' : '0',
-              }}
-            >
-              <span style={{ fontFamily: 'var(--font-d)', fontSize: '8px', fontWeight: 700, letterSpacing: '0.18em', textTransform: 'uppercase', color: 'var(--ink3)' }}>
-                CHANGELOG
-              </span>
-              <span style={{ fontFamily: 'var(--font-d)', fontSize: '9px', color: 'var(--ink3)', transition: 'transform 0.2s', display: 'inline-block', transform: changelogOpen ? 'rotate(180deg)' : 'rotate(0deg)' }}>▾</span>
-            </button>
-            {changelogOpen && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
-                {CHANGELOG.map((entry, i) => (
-                  <div
-                    key={entry.version}
-                    style={{
-                      borderTop: i > 0 ? '1px solid var(--line)' : '1px solid var(--line)',
-                      padding: '10px 0',
-                    }}
-                  >
-                    {/* ヘッダー：バージョン + 日付 + タグ */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '5px', flexWrap: 'wrap' }}>
-                      <span style={{ fontFamily: 'var(--font-d)', fontSize: '9px', fontWeight: 700, letterSpacing: '0.08em', color: 'var(--ink)' }}>
-                        {entry.version}
-                      </span>
-                      <span style={{ fontFamily: 'var(--font-c)', fontSize: '10px', color: 'var(--ink3)' }}>
-                        {entry.date}
-                      </span>
-                      {entry.tags.map(tag => (
-                        <span key={tag} style={{
-                          fontFamily: 'var(--font-d)', fontSize: '7.5px', fontWeight: 700,
-                          letterSpacing: '0.06em', padding: '2px 6px',
-                          border: '1px solid var(--line2)', color: 'var(--ink3)',
-                        }}>
-                          {tag}
-                        </span>
-                      ))}
-                    </div>
-                    {/* タイトル */}
-                    <div style={{ fontFamily: 'var(--font-c)', fontSize: '11.5px', color: 'var(--ink)', marginBottom: '6px', lineHeight: 1.4 }}>
-                      {entry.title}
-                    </div>
-                    {/* 更新内容リスト */}
-                    <ul style={{ margin: 0, paddingLeft: '12px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                      {entry.items.map((item, j) => (
-                        <li key={j} style={{ fontFamily: 'var(--font-c)', fontSize: '10.5px', color: 'var(--ink2)', lineHeight: 1.5 }}>
-                          {item}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
         </div>
       </div>
 
@@ -438,6 +378,90 @@ export default function HomePage() {
           </div>
         </div>
       )}
+
+      {/* UPDATES — ページ最下部 */}
+      <div style={{ borderTop: '1px solid var(--line)', margin: '0' }}>
+        <button
+          onClick={() => setChangelogOpen(p => !p)}
+          style={{
+            width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            padding: '18px 44px', background: 'transparent', border: 'none', cursor: 'pointer',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <span style={{ fontFamily: 'var(--font-d)', fontSize: '8px', fontWeight: 700, letterSpacing: '0.22em', textTransform: 'uppercase', color: 'var(--ink3)' }}>
+              UPDATES
+            </span>
+            <span style={{ fontFamily: 'var(--font-c)', fontSize: '10px', color: 'var(--ink4)' }}>
+              {CHANGELOG[0].version} — {CHANGELOG[0].date}
+            </span>
+          </div>
+          <span style={{
+            fontFamily: 'var(--font-d)', fontSize: '9px', color: 'var(--ink3)',
+            display: 'inline-block', transition: 'transform 0.2s',
+            transform: changelogOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+          }}>▾</span>
+        </button>
+
+        {changelogOpen && (
+          <div style={{ borderTop: '1px solid var(--line)' }}>
+            {CHANGELOG.map((entry, i) => (
+              <div
+                key={entry.version}
+                style={{
+                  borderBottom: '1px solid var(--line)',
+                  padding: '20px 44px',
+                  display: 'grid',
+                  gridTemplateColumns: '180px 1fr',
+                  gap: '32px',
+                  alignItems: 'start',
+                }}
+              >
+                {/* 左：バージョン・日付・タグ */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', paddingTop: '2px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontFamily: 'var(--font-d)', fontSize: '10px', fontWeight: 700, letterSpacing: '0.08em', color: 'var(--ink)' }}>
+                      {entry.version}
+                    </span>
+                    {i === 0 && (
+                      <span style={{ fontFamily: 'var(--font-d)', fontSize: '7px', fontWeight: 700, letterSpacing: '0.1em', padding: '2px 6px', background: 'var(--ink)', color: 'var(--bg)', textTransform: 'uppercase' }}>
+                        LATEST
+                      </span>
+                    )}
+                  </div>
+                  <span style={{ fontFamily: 'var(--font-c)', fontSize: '10px', color: 'var(--ink3)' }}>
+                    {entry.date}
+                  </span>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '2px' }}>
+                    {entry.tags.map(tag => (
+                      <span key={tag} style={{
+                        fontFamily: 'var(--font-d)', fontSize: '7px', fontWeight: 700,
+                        letterSpacing: '0.06em', padding: '2px 6px',
+                        border: '1px solid var(--line2)', color: 'var(--ink3)',
+                      }}>
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+                {/* 右：タイトル＋更新内容 */}
+                <div>
+                  <div style={{ fontFamily: 'var(--font-c)', fontSize: '12px', fontWeight: 500, color: 'var(--ink)', marginBottom: '8px', lineHeight: 1.4 }}>
+                    {entry.title}
+                  </div>
+                  <ul style={{ margin: 0, paddingLeft: '14px', display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                    {entry.items.map((item, j) => (
+                      <li key={j} style={{ fontFamily: 'var(--font-c)', fontSize: '11px', color: 'var(--ink2)', lineHeight: 1.6 }}>
+                        {item}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   )
 }
