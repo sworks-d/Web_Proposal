@@ -25,6 +25,8 @@ model Project {
   title        String
   briefText    String
   industryType String            @default("general")
+  caseType     String            @default("A")         // A: 新規 / B: リニューアル / C: 改善
+  siteUrl      String?                                  // B/C 必須
   status       String            @default("ACTIVE")   // ACTIVE | ARCHIVED
   createdAt    DateTime          @default(now())
   updatedAt    DateTime          @updatedAt

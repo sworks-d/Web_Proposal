@@ -60,6 +60,8 @@ export default function HomePage() {
   const [title, setTitle] = useState('')
   const [industryType, setIndustryType] = useState('recruitment')
   const [briefText, setBriefText] = useState('')
+  const [caseType, setCaseType] = useState<'A' | 'B' | 'C'>('A')
+  const [siteUrl, setSiteUrl] = useState('')
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
@@ -85,13 +87,17 @@ export default function HomePage() {
       setError('クライアント名・案件タイトル・依頼内容は必須です')
       return
     }
+    if ((caseType === 'B' || caseType === 'C') && !siteUrl.trim()) {
+      setError('リニューアル・改善案件はサイトURLが必須です')
+      return
+    }
     setError('')
     setSubmitting(true)
     try {
       const res = await fetch('/api/projects', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ clientName: clientName.trim(), title: title.trim(), briefText: briefText.trim(), industryType }),
+        body: JSON.stringify({ clientName: clientName.trim(), title: title.trim(), briefText: briefText.trim(), industryType, caseType, siteUrl: siteUrl.trim() || undefined }),
       })
       const project = await res.json()
       if (!res.ok) throw new Error(project.error)
@@ -327,9 +333,53 @@ export default function HomePage() {
             <form onSubmit={handleSubmit} style={{ padding: '22px 30px' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
                 <div>
+                  <label style={labelStyle}>案件種別 <span style={{ color: 'var(--red)' }}>*</span></label>
+                  <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+                    {([['A', '新規制作'], ['B', 'リニューアル'], ['C', '部分改善']] as const).map(([v, l]) => (
+                      <button
+                        key={v}
+                        type="button"
+                        onClick={() => setCaseType(v)}
+                        style={{
+                          flex: 1,
+                          padding: '8px 0',
+                          fontFamily: 'var(--font-d)',
+                          fontSize: '9px',
+                          letterSpacing: '0.12em',
+                          textTransform: 'uppercase',
+                          border: '1px solid',
+                          borderColor: caseType === v ? 'var(--ink)' : 'var(--line2)',
+                          background: caseType === v ? 'var(--ink)' : 'transparent',
+                          color: caseType === v ? 'var(--bg)' : 'var(--ink3)',
+                          cursor: 'pointer',
+                          borderRadius: '2px',
+                          transition: 'all 0.15s',
+                        }}
+                      >
+                        {v} — {l}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
                   <label style={labelStyle}>クライアント名 <span style={{ color: 'var(--red)' }}>*</span></label>
                   <input value={clientName} onChange={e => setClientName(e.target.value)} style={inputStyle} placeholder="例：中部電力グループ" />
                 </div>
+                {(caseType === 'B' || caseType === 'C') && (
+                  <div>
+                    <label style={labelStyle}>現状サイトURL <span style={{ color: 'var(--red)' }}>*</span></label>
+                    <input
+                      value={siteUrl}
+                      onChange={e => setSiteUrl(e.target.value)}
+                      style={inputStyle}
+                      placeholder="https://example.com"
+                      type="url"
+                    />
+                    <p style={{ fontFamily: 'var(--font-c)', fontSize: '11px', color: 'var(--ink4)', marginTop: '4px' }}>
+                      サイトを直接取得するため処理時間が 1-2 分に短縮されます
+                    </p>
+                  </div>
+                )}
                 <div>
                   <label style={labelStyle}>案件タイトル <span style={{ color: 'var(--red)' }}>*</span></label>
                   <input value={title} onChange={e => setTitle(e.target.value)} style={inputStyle} placeholder="例：キャリア採用サイト統合リニューアル" />

@@ -67,6 +67,8 @@ export async function POST(
     briefText: version.project.briefText,
     industryType: version.project.industryType,
     cdNotes,
+    caseType: (version.project.caseType as 'A' | 'B' | 'C') ?? 'A',
+    siteUrl: version.project.siteUrl ?? undefined,
   }
 
   const prevOutputMap = await getVersionOutputs(versionId)

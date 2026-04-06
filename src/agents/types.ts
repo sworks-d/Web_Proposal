@@ -11,13 +11,18 @@ export type ConfidenceLevel = 'high' | 'medium' | 'low'
 export type VizType = 'chart' | 'mermaid' | 'matrix' | 'positioning'
 export type RendererType = 'recharts' | 'mermaid' | 'custom-svg'
 
+export type CaseType = 'A' | 'B' | 'C'
+// A: 新規サイト制作 / B: フルリニューアル / C: 部分改善・機能追加
+
 export interface ProjectContext {
   clientName: string
   clientIndustry?: string
   briefText: string
   industryType: string
   knownConstraints?: string
-  cdNotes?: Record<string, string>  // AGId別にCDが追加したヒアリング情報
+  cdNotes?: Record<string, string>
+  caseType?: CaseType   // A: 新規 / B: リニューアル / C: 改善
+  siteUrl?: string      // B/C 必須: 現状サイトURL
 }
 
 export interface Section {

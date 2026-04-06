@@ -28,9 +28,12 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  const { clientName, title, briefText, industryType } = await req.json()
+  const { clientName, title, briefText, industryType, caseType, siteUrl } = await req.json()
   if (!clientName || !title || !briefText) {
     return NextResponse.json({ error: 'clientName, title, briefText are required' }, { status: 400 })
+  }
+  if ((caseType === 'B' || caseType === 'C') && !siteUrl) {
+    return NextResponse.json({ error: 'リニューアル・改善案件はサイトURLが必須です' }, { status: 400 })
   }
   const client = await prisma.client.upsert({
     where: { name: clientName },
@@ -38,7 +41,14 @@ export async function POST(req: NextRequest) {
     create: { name: clientName },
   })
   const project = await prisma.project.create({
-    data: { clientId: client.id, title, briefText, industryType: industryType ?? 'general' },
+    data: {
+      clientId: client.id,
+      title,
+      briefText,
+      industryType: industryType ?? 'general',
+      caseType: caseType ?? 'A',
+      siteUrl: siteUrl ?? null,
+    },
     include: { client: true },
   })
   return NextResponse.json(project)

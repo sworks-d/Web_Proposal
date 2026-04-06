@@ -34,6 +34,8 @@ export async function POST(req: NextRequest) {
     clientIndustry: project.client.industry ?? undefined,
     briefText: project.briefText,
     industryType: project.industryType,
+    caseType: (project.caseType as 'A' | 'B' | 'C') ?? 'A',
+    siteUrl: project.siteUrl ?? undefined,
   }
 
   const encoder = new TextEncoder()

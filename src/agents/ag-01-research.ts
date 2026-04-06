@@ -2,6 +2,8 @@ import { BaseAgent } from './base-agent'
 import { AgentId, AgentInput, AgentOutput, ProjectContext } from './types'
 import { loadPrompt } from '@/lib/prompt-loader'
 import anthropic from '@/lib/anthropic-client'
+import { fetchSiteData } from '@/lib/site-fetcher'
+import { measurePageSpeed } from '@/lib/pagespeed-client'
 
 export class Ag01ResearchAgent extends BaseAgent {
   id: AgentId = 'AG-01-RESEARCH'
@@ -13,6 +15,19 @@ export class Ag01ResearchAgent extends BaseAgent {
   }
 
   async execute(input: AgentInput): Promise<AgentOutput> {
+    const caseType = input.projectContext.caseType ?? 'A'
+    console.log(`[AG-01-RESEARCH] 案件種別: ${caseType}`)
+
+    if (caseType === 'B' || caseType === 'C') {
+      return this.executeRenewalFlow(input)
+    } else {
+      return this.executeNewFlow(input)
+    }
+  }
+
+  // ─── A: 新規案件 — web_search 中心（最大20回）───────────────────────────
+
+  private async executeNewFlow(input: AgentInput): Promise<AgentOutput> {
     const system = this.getPrompt(input.projectContext)
     const user = this.buildUserMessage(input)
 
@@ -21,7 +36,7 @@ export class Ag01ResearchAgent extends BaseAgent {
     const messages: Msg[] = [{ role: 'user', content: user }]
     let fullText = ''
 
-    console.log(`[AG-01-RESEARCH] 開始 — web_search max_uses=10`)
+    console.log(`[AG-01-RESEARCH] 新規フロー開始 — web_search max_uses=20`)
     const t0 = Date.now()
 
     for (let i = 0; i < 4; i++) {
@@ -33,15 +48,13 @@ export class Ag01ResearchAgent extends BaseAgent {
         max_tokens: 8192,
         system,
         messages,
-        // web_search_20260209 はサーバーサイドツール（Anthropic が自動実行）
-        // max_uses は初回のみ渡す（continuation では tools を渡さない）
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        ...(i === 0 ? { tools: [{ type: 'web_search_20260209' as any, name: 'web_search', max_uses: 10 }] } : {}),
+        ...(i === 0 ? { tools: [{ type: 'web_search_20260209' as any, name: 'web_search', max_uses: 20 }] } : {}),
       })
 
       const elapsed = ((Date.now() - tCall) / 1000).toFixed(1)
       const searchCount = res.content.filter(b => b.type === 'server_tool_use').length
-      console.log(`[AG-01-RESEARCH] API呼び出し #${i + 1} 完了 — ${elapsed}s, stop_reason=${res.stop_reason}, 検索数=${searchCount}`)
+      console.log(`[AG-01-RESEARCH] #${i + 1} 完了 — ${elapsed}s, stop_reason=${res.stop_reason}, 検索数=${searchCount}`)
 
       const chunk = res.content
         .filter(b => b.type === 'text')
@@ -49,15 +62,97 @@ export class Ag01ResearchAgent extends BaseAgent {
         .join('')
 
       fullText += chunk
-
       if (res.stop_reason !== 'max_tokens') break
 
-      // max_tokens 継続: full content を assistant メッセージとして渡す（tool_use ブロックを保持）
       messages.push({ role: 'assistant', content: res.content })
       messages.push({ role: 'user', content: '前回の続きをそのまま出力してください。前置き・説明・重複は不要です。' })
     }
 
-    console.log(`[AG-01-RESEARCH] 完了 — 合計 ${((Date.now() - t0) / 1000).toFixed(1)}s`)
+    console.log(`[AG-01-RESEARCH] 新規フロー完了 — 合計 ${((Date.now() - t0) / 1000).toFixed(1)}s`)
+    this.lastRawText = fullText
+    return this.parseOutput(fullText)
+  }
+
+  // ─── B/C: リニューアル・改善 — web_fetch + PageSpeed + web_search（最大10回）
+
+  private async executeRenewalFlow(input: AgentInput): Promise<AgentOutput> {
+    const siteUrl = input.projectContext.siteUrl
+    if (!siteUrl) throw new Error('リニューアル案件にはサイトURLが必要です')
+
+    const t0 = Date.now()
+    console.log(`[AG-01-RESEARCH] リニューアルフロー開始 — ${siteUrl}`)
+
+    // Step 1: サイトページを並列取得 + PageSpeed を並列実行
+    console.log(`[AG-01-RESEARCH] Step1: サイト取得 & PageSpeed 計測（並列）`)
+    const [siteData, pageSpeedResult] = await Promise.allSettled([
+      fetchSiteData(siteUrl),
+      process.env.GOOGLE_PAGESPEED_API_KEY
+        ? measurePageSpeed(siteUrl, 'mobile')
+        : Promise.reject(new Error('GOOGLE_PAGESPEED_API_KEY 未設定')),
+    ])
+
+    const siteText = siteData.status === 'fulfilled'
+      ? siteData.value.combinedText
+      : `サイト取得失敗: ${(siteData as PromiseRejectedResult).reason}`
+
+    const pageSpeedSummary = pageSpeedResult.status === 'fulfilled'
+      ? JSON.stringify({
+          performance: pageSpeedResult.value.performanceScore,
+          accessibility: pageSpeedResult.value.accessibilityScore,
+          seo: pageSpeedResult.value.seoScore,
+          lcp: pageSpeedResult.value.coreWebVitals.lcp,
+          cls: pageSpeedResult.value.coreWebVitals.cls,
+          inp: pageSpeedResult.value.coreWebVitals.inp,
+        })
+      : `PageSpeed未計測（${(pageSpeedResult as PromiseRejectedResult).reason?.message ?? ''}）`
+
+    console.log(`[AG-01-RESEARCH] Step1完了 — サイト取得=${siteData.status}, PageSpeed=${pageSpeedResult.status}`)
+
+    // Step 2: 取得したサイトデータ + web_search（最大10回）でリサーチ
+    const system = this.getPrompt(input.projectContext)
+    const baseUser = this.buildUserMessage(input)
+    const user = `${baseUser}
+
+---
+## 事前取得データ（このデータは実データです。信頼度★★★として扱ってください）
+
+### サイトから取得したコンテンツ
+${siteText}
+
+### PageSpeed Insights 計測結果
+${pageSpeedSummary}
+
+---
+【重要】上記の事前取得データをベースに分析してください。
+web_searchはサイトに載っていない「業界情報・競合情報・口コミ」の収集のみに使用し、10回以内に収めてください。`
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    type Msg = { role: 'user' | 'assistant'; content: any }
+    const messages: Msg[] = [{ role: 'user', content: user }]
+    let fullText = ''
+
+    console.log(`[AG-01-RESEARCH] Step2: web_search（周辺情報のみ、最大10回）`)
+    const tCall = Date.now()
+
+    const res = await anthropic.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 8192,
+      system,
+      messages,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      tools: [{ type: 'web_search_20260209' as any, name: 'web_search', max_uses: 10 }],
+    })
+
+    const elapsed = ((Date.now() - tCall) / 1000).toFixed(1)
+    const searchCount = res.content.filter(b => b.type === 'server_tool_use').length
+    console.log(`[AG-01-RESEARCH] Step2完了 — ${elapsed}s, 検索数=${searchCount}`)
+
+    fullText = res.content
+      .filter(b => b.type === 'text')
+      .map(b => (b as { type: 'text'; text: string }).text)
+      .join('')
+
+    console.log(`[AG-01-RESEARCH] リニューアルフロー完了 — 合計 ${((Date.now() - t0) / 1000).toFixed(1)}s`)
 
     this.lastRawText = fullText
     return this.parseOutput(fullText)
@@ -73,25 +168,21 @@ export class Ag01ResearchAgent extends BaseAgent {
         content: JSON.stringify(p.companyBasics, null, 2),
         sectionType: 'text', isEditable: true, canRegenerate: true,
       })
-
       if (p.areaProfile) sections.push({
         id: 'area-profile', title: 'エリアプロフィール',
         content: JSON.stringify(p.areaProfile, null, 2),
         sectionType: 'text', isEditable: true, canRegenerate: true,
       })
-
       if (p.industryProfile) sections.push({
         id: 'industry-profile', title: '業界プロフィール',
         content: JSON.stringify(p.industryProfile, null, 2),
         sectionType: 'text', isEditable: true, canRegenerate: true,
       })
-
       if (p.reputationData) sections.push({
         id: 'reputation', title: '評判・口コミデータ',
         content: JSON.stringify(p.reputationData, null, 2),
         sectionType: 'text', isEditable: true, canRegenerate: true,
       })
-
       if (p.subjectiveVsObjective) {
         const svo = p.subjectiveVsObjective as Record<string, unknown>
         const gaps = Array.isArray(svo.gaps) ? (svo.gaps as string[]).join('\n') : ''
@@ -101,7 +192,6 @@ export class Ag01ResearchAgent extends BaseAgent {
           sectionType: 'text', isEditable: true, canRegenerate: true,
         })
       }
-
       if (p.chartData) sections.push({
         id: 'chart-data', title: 'チャートデータ（業界ランキング等）',
         content: JSON.stringify(p.chartData, null, 2),
