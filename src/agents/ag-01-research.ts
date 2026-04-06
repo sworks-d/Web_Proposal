@@ -16,22 +16,35 @@ export class Ag01ResearchAgent extends BaseAgent {
     const system = this.getPrompt(input.projectContext)
     const user = this.buildUserMessage(input)
 
-    const res = await anthropic.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 8192,
-      system,
-      messages: [{ role: 'user', content: user }],
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      tools: [{ type: 'web_search_20260209' as any, name: 'web_search', max_uses: 15 }],
-    })
+    type Msg = { role: 'user' | 'assistant'; content: string }
+    const messages: Msg[] = [{ role: 'user', content: user }]
+    let fullText = ''
 
-    const rawText = res.content
-      .filter(b => b.type === 'text')
-      .map(b => (b as { type: 'text'; text: string }).text)
-      .join('\n')
+    for (let i = 0; i < 4; i++) {
+      const res = await anthropic.messages.create({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 8192,
+        system,
+        messages,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        tools: i === 0 ? [{ type: 'web_search_20260209' as any, name: 'web_search', max_uses: 15 }] : [],
+      })
 
-    this.lastRawText = rawText
-    return this.parseOutput(rawText)
+      const chunk = res.content
+        .filter(b => b.type === 'text')
+        .map(b => (b as { type: 'text'; text: string }).text)
+        .join('')
+
+      fullText += chunk
+
+      if (res.stop_reason !== 'max_tokens') break
+
+      messages.push({ role: 'assistant', content: chunk })
+      messages.push({ role: 'user', content: '前回の続きをそのまま出力してください。前置き・説明・重複は不要です。' })
+    }
+
+    this.lastRawText = fullText
+    return this.parseOutput(fullText)
   }
 
   parseOutput(raw: string): AgentOutput {

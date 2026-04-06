@@ -1,5 +1,5 @@
 import { BaseAgent } from './base-agent'
-import { AgentId, AgentOutput, ProjectContext } from './types'
+import { AgentId, AgentInput, AgentOutput, ProjectContext } from './types'
 import { loadPrompt } from '@/lib/prompt-loader'
 
 export class Ag07c1Agent extends BaseAgent {
@@ -9,6 +9,26 @@ export class Ag07c1Agent extends BaseAgent {
 
   getPrompt(_ctx: ProjectContext): string {
     return loadPrompt('ag-07c-1')
+  }
+
+  async execute(input: AgentInput): Promise<AgentOutput> {
+    const [ch01, ch02] = await Promise.all([
+      this.callSection(input,
+        'Ch.01（今、何が起きているか）のスライドのみ生成してください。出力フィールド: chapter="ch-01", slides（ch-01のスライドのみ）。他のフィールドは含めない。',
+        7000),
+      this.callSection(input,
+        'Ch.02（なぜ今のサイトでは解けないか）のスライドのみ生成してください。出力フィールド: chapter="ch-02", slides（ch-02のスライドのみ）, confidence, factBasis。他のフィールドは含めない。',
+        7000),
+    ])
+
+    const merged = {
+      chapter: 'ch-01-02',
+      slides: [...((ch01.slides as unknown[]) ?? []), ...((ch02.slides as unknown[]) ?? [])],
+      confidence: ch02.confidence ?? ch01.confidence ?? 'medium',
+      factBasis: [...((ch01.factBasis as string[]) ?? []), ...((ch02.factBasis as string[]) ?? [])],
+    }
+    this.lastRawText = JSON.stringify(merged)
+    return this.parseOutput(this.lastRawText)
   }
 
   parseOutput(raw: string): AgentOutput {
