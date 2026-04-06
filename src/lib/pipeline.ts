@@ -17,6 +17,7 @@ import { Ag02JourneyAgent } from '@/agents/ag-02-journey'
 import { Ag02StpAgent } from '@/agents/ag-02-stp'
 import { Ag02VpcAgent } from '@/agents/ag-02-vpc'
 import { Ag02MergeAgent } from '@/agents/ag-02-merge'
+import { Ag02ValidateAgent } from '@/agents/ag-02-validate'
 import { Ag03CompetitorAgent } from '@/agents/ag-03-competitor'
 import { Ag03DataAgent } from '@/agents/ag-03-data'
 import { Ag03GapAgent } from '@/agents/ag-03-gap'
@@ -118,6 +119,7 @@ export async function runAgentStep(
     case 'AG-02-VPC':       agent = new Ag02VpcAgent(); break
     case 'AG-02-MERGE':     agent = new Ag02MergeAgent(); break
     case 'AG-02-POSITION':  agent = new Ag02PositionAgent(); break
+    case 'AG-02-VALIDATE':  agent = new Ag02ValidateAgent(); break
     case 'AG-03': agent = new Ag03CompetitorAgent(); break
     case 'AG-03-DATA': agent = new Ag03DataAgent(); break
     case 'AG-03-GAP': agent = new Ag03GapAgent(); break
@@ -317,6 +319,11 @@ function extractContextSections(agentId: string, p: any): AgentOutput['sections'
       s('target',      '統合ターゲット',          `${p.primaryTarget ?? ''}\n状態: ${p.targetContextualState ?? ''}`),
       s('journey',     '統合ジャーニー',          JSON.stringify(p.consolidatedJourney ?? '').slice(0, 400)),
       s('principles',  '設計原則（統合）',        (p.siteDesignPrinciples ?? []).slice(0, 3).map((x: any) => `[${x.priority}] ${x.principle}`).join('\n')),
+    ]
+    case 'AG-02-VALIDATE': return [
+      s('confirmed',   '検証済み比較軸',          (p.decisionCriteriaValidation as any[] ?? []).filter((c: any) => c.newConfidence === 'confirmed').map((c: any) => c.criterion).join(', ')),
+      s('language',    'ターゲット言語マッピング', (p.targetLanguageMapping as any[] ?? []).slice(0, 4).map((m: any) => `「${m.companyTerm}」→「${m.targetTerm}」`).join('\n')),
+      s('insights',    '新発見インサイト',        (p.discoveredInsights as any[] ?? []).slice(0, 3).map((i: any) => `[${i.type}] ${i.content}`).join('\n')),
     ]
     case 'AG-03-DATA': return [
       s('funnel',      'ファネル分析',            JSON.stringify(p.funnelAnalysis ?? '').slice(0, 400)),

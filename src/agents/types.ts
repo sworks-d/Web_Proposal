@@ -1,6 +1,6 @@
 export type AgentId =
   | 'AG-01' | 'AG-01-RESEARCH' | 'AG-01-MERGE'
-  | 'AG-02' | 'AG-02-STP' | 'AG-02-JOURNEY' | 'AG-02-VPC' | 'AG-02-MERGE' | 'AG-02-POSITION'
+  | 'AG-02' | 'AG-02-STP' | 'AG-02-JOURNEY' | 'AG-02-VPC' | 'AG-02-MERGE' | 'AG-02-POSITION' | 'AG-02-VALIDATE'
   | 'AG-03' | 'AG-03-HEURISTIC' | 'AG-03-HEURISTIC2' | 'AG-03-GAP' | 'AG-03-DATA' | 'AG-03-MERGE'
   | 'AG-04' | 'AG-04-MAIN' | 'AG-04-INSIGHT' | 'AG-04-MERGE'
   | 'AG-05'

@@ -7,7 +7,7 @@ const prisma = new PrismaClient()
 
 const AGENT_ORDER = [
   'AG-01',
-  'AG-02', 'AG-02-STP', 'AG-02-JOURNEY', 'AG-02-VPC', 'AG-02-MERGE',
+  'AG-02', 'AG-02-STP', 'AG-02-JOURNEY', 'AG-02-VPC', 'AG-02-MERGE', 'AG-02-VALIDATE',
   'AG-03', 'AG-03-HEURISTIC', 'AG-03-HEURISTIC2', 'AG-03-GAP', 'AG-03-DATA', 'AG-03-MERGE',
   'AG-04-MAIN', 'AG-04', 'AG-04-MERGE',
   'AG-05', 'AG-06',
@@ -21,6 +21,7 @@ const AG_LABELS: Record<string, string> = {
   'AG-02-JOURNEY':    'カスタマージャーニー',
   'AG-02-VPC':        'バリュープロポジション',
   'AG-02-MERGE':      '市場分析統合',
+  'AG-02-VALIDATE':   'ターゲット設計検証',
   'AG-03':            '競合特定・ポジション',
   'AG-03-HEURISTIC':  'ヒューリスティック評価（上位2社）',
   'AG-03-HEURISTIC2': 'ヒューリスティック評価（残競合）',
