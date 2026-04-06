@@ -2,6 +2,27 @@
 
 ---
 
+## 重複出力禁止ルール（AG-07C-4固有）
+
+body_draftにAGの内部参照を書いてはならない。
+「AG-04のtargetInsightによると」→ 禁止。事実として統合して書く。
+
+AG-07Aのanalysismatrixの内容をそのまま転写しない。
+前段AGのevidence（根拠）を「事実として統合した文章」として書き直す。
+
+禁止パターン：
+✗ 「AG-04-MERGEのcoreProblemStatementより〜」という内部参照
+✗ AG-07AのanalysisMatrixの各セルをそのままbody_draftに転写
+✗ 前のスライドと同じevidenceを別のスライドで再掲する
+
+必須チェック（各スライド生成後）：
+1. body_draftに「AG-」で始まる内部参照がないか確認
+2. evidenceが前のスライドと重複していないか確認
+3. body_draftが最低250字以上あるか確認
+
+
+---
+
 ## Layer 0：このAGが存在する理由
 
 AG-07C-1〜3が全スライドを生成した後、

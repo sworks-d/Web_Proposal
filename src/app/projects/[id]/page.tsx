@@ -26,6 +26,9 @@ interface VersionSummary {
   versionNumber: number
   label: string | null
   status: string
+  changeReason: string | null
+  createdAt: string
+  completedAt: string | null
 }
 
 type AppStatus = 'idle' | 'running' | 'checkpoint' | 'error' | 'completed'
@@ -391,7 +394,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
               </button>
               {showVersionDropdown && (
                 <div
-                  style={{ position: 'absolute', right: 0, top: '100%', marginTop: '4px', minWidth: '220px', background: 'var(--bg)', border: '1px solid var(--line2)', boxShadow: '0 8px 24px rgba(28,28,23,0.1)', zIndex: 100 }}
+                  style={{ position: 'absolute', right: 0, top: '100%', marginTop: '4px', minWidth: '320px', background: 'var(--bg)', border: '1px solid var(--line2)', boxShadow: '0 8px 24px rgba(28,28,23,0.1)', zIndex: 100 }}
                   onMouseLeave={() => setShowVersionDropdown(false)}
                 >
                   {[...versions].reverse().map(v => (
@@ -399,19 +402,73 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
                       key={v.id}
                       onClick={() => { setCurrentVersionId(v.id); setShowVersionDropdown(false) }}
                       style={{
-                        width: '100%', textAlign: 'left', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        width: '100%', textAlign: 'left', display: 'flex', flexDirection: 'column', gap: '4px',
                         padding: '12px 14px', background: v.id === currentVersionId ? 'var(--bg2)' : 'transparent',
-                        border: 'none', borderBottom: '1px solid var(--line)', fontFamily: 'var(--font-c)', fontSize: '12px', color: 'var(--ink)', cursor: 'pointer',
+                        border: 'none', borderBottom: '1px solid var(--line)', fontFamily: 'var(--font-c)', color: 'var(--ink)', cursor: 'pointer',
                       }}
                     >
-                      <span>v{v.versionNumber} {v.label ?? '初回提案'}</span>
-                      <span style={{ fontSize: '9px', color: statusColor(v.status), fontFamily: 'var(--font-d)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>{statusLabel(v.status)}</span>
+                      {/* 1行目：バージョン番号 + ラベル + ステータス */}
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                        <span style={{ fontSize: '13px', fontWeight: 600, fontFamily: 'var(--font-d)', letterSpacing: '0.04em' }}>
+                          v{v.versionNumber}
+                          {v.label && <span style={{ marginLeft: '6px', fontWeight: 400, fontSize: '12px' }}>{v.label}</span>}
+                        </span>
+                        <span style={{ fontSize: '9px', color: statusColor(v.status), fontFamily: 'var(--font-d)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>{statusLabel(v.status)}</span>
+                      </div>
+                      {/* 2行目：更新概要（changeReason） */}
+                      {v.changeReason && (
+                        <div style={{ fontSize: '11px', color: 'var(--ink2)', lineHeight: 1.4, maxWidth: '280px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {v.changeReason}
+                        </div>
+                      )}
+                      {/* 3行目：日時 */}
+                      <div style={{ display: 'flex', gap: '10px', fontSize: '10px', color: 'var(--ink3, var(--ink2))' }}>
+                        <span>作成 {formatDate(v.createdAt)}</span>
+                        {v.completedAt && <span>完了 {formatDate(v.completedAt)}</span>}
+                      </div>
                     </button>
                   ))}
                   <div style={{ padding: '10px 14px', borderTop: '1px solid var(--line)' }}>
+                    <div style={{ marginBottom: '6px' }}>
+                      <input
+                        id="change-reason-input"
+                        type="text"
+                        placeholder="更新内容の概要（例：競合分析を追加）"
+                        style={{
+                          width: '100%', padding: '7px 8px', fontSize: '11px', border: '1px solid var(--line2)',
+                          fontFamily: 'var(--font-c)', color: 'var(--ink)', background: 'var(--bg)',
+                          boxSizing: 'border-box'
+                        }}
+                        onKeyDown={e => e.stopPropagation()}
+                        onClick={e => e.stopPropagation()}
+                      />
+                    </div>
                     <button
                       style={{ width: '100%', background: 'var(--ink)', color: 'var(--bg)', fontFamily: 'var(--font-d)', fontSize: '8px', fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', padding: '9px', border: 'none', cursor: 'pointer' }}
-                      onClick={() => { setShowVersionDropdown(false) }}
+                      onClick={async (e) => {
+                        e.stopPropagation()
+                        const input = document.getElementById('change-reason-input') as HTMLInputElement
+                        const reason = input?.value?.trim()
+                        if (!currentVersionId) return
+                        setShowVersionDropdown(false)
+                        // 新バージョンを作成
+                        const res = await fetch(`/api/projects/${id}/versions`, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            type: 'update',
+                            parentVersionId: currentVersionId,
+                            changeReason: reason || '手動更新',
+                            label: reason ? reason.slice(0, 20) : undefined,
+                            agentsToRerun: [],
+                          }),
+                        })
+                        if (res.ok) {
+                          const newVer = await res.json()
+                          setVersions(prev => [...prev, { id: newVer.id, versionNumber: newVer.versionNumber, label: newVer.label, status: newVer.status, changeReason: newVer.changeReason, createdAt: newVer.createdAt, completedAt: newVer.completedAt }])
+                          setCurrentVersionId(newVer.id)
+                        }
+                      }}
                     >
                       + このバージョンを更新
                     </button>
@@ -631,6 +688,17 @@ function statusLabel(s: string) {
   if (s === 'COMPLETED') return '完了'
   if (s === 'ERROR') return 'エラー'
   return 'Draft'
+}
+
+function formatDate(dateStr: string | null | undefined): string {
+  if (!dateStr) return ''
+  const d = new Date(dateStr)
+  const y = d.getFullYear()
+  const mo = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  const h = String(d.getHours()).padStart(2, '0')
+  const m = String(d.getMinutes()).padStart(2, '0')
+  return `${y}/${mo}/${day} ${h}:${m}`
 }
 
 function statusColor(s: string) {

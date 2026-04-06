@@ -101,13 +101,14 @@ export async function getVersionHistory(projectId: string) {
   return prisma.proposalVersion.findMany({
     where: { projectId },
     orderBy: { versionNumber: 'asc' },
-    include: {
-      executions: {
-        include: { results: true },
-        orderBy: { startedAt: 'asc' },
-      },
-      slides: { orderBy: { slideNumber: 'asc' } },
-      parentVersion: { select: { versionNumber: true, label: true } },
+    select: {
+      id: true,
+      versionNumber: true,
+      label: true,
+      status: true,
+      changeReason: true,
+      createdAt: true,
+      completedAt: true,
     },
   })
 }
