@@ -80,11 +80,15 @@ model AgentResult {
   executionId       String
   execution         Execution @relation(fields: [executionId], references: [id])
   agentId           String
-  outputJson        String
+  status            String    @default("COMPLETED")   // PENDING | RUNNING | COMPLETED | FAILED | SKIPPED
+  outputJson        String    @default("")
   editedJson        String?
   approvedAt        DateTime?
   parseError        Boolean   @default(false)
   parseErrorMessage String?
+  errorMessage      String?                            // 失敗時エラー内容
+  startedAt         DateTime?                          // エージェント開始時刻
+  completedAt       DateTime?                          // 完了/失敗時刻
   createdAt         DateTime  @default(now())
 }
 

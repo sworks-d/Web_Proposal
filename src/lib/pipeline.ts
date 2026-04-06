@@ -57,6 +57,40 @@ function createAg02Agent(primaryId: string): Ag02BaseAgent {
   return factory ? factory() : new Ag02GeneralAgent()
 }
 
+// エージェント単位のタイムアウト（ms）
+const AGENT_TIMEOUTS: Record<string, number> = {
+  'AG-01':            120_000,
+  'AG-01-RESEARCH':   300_000,  // web_search最大20回 → 余裕を持って5分
+  'AG-01-MERGE':      120_000,
+  'AG-02':            150_000,
+  'AG-02-STP':        150_000,
+  'AG-02-JOURNEY':    150_000,
+  'AG-02-VPC':        120_000,
+  'AG-02-POSITION':   120_000,
+  'AG-02-MERGE':      120_000,
+  'AG-02-VALIDATE':    90_000,  // 独自タイムアウト設定済みだが念のため
+  'AG-03':            180_000,
+  'AG-03-HEURISTIC':  180_000,
+  'AG-03-HEURISTIC2': 180_000,
+  'AG-03-GAP':        150_000,
+  'AG-03-DATA':       120_000,
+  'AG-03-MERGE':      120_000,
+  'AG-04':            150_000,
+  'AG-04-MAIN':       150_000,
+  'AG-04-INSIGHT':    150_000,
+  'AG-04-MERGE':      120_000,
+  'AG-05':            180_000,
+  'AG-06':            180_000,
+  'AG-07':            150_000,
+  'AG-07A':           150_000,
+  'AG-07B':           150_000,
+  'AG-07C':           150_000,
+  'AG-07C-1':         120_000,
+  'AG-07C-2':         120_000,
+  'AG-07C-3':         120_000,
+  'AG-07C-4':         120_000,
+}
+
 const FORBIDDEN_REUSE: Record<string, string[]> = {
   'AG-03-MERGE': ['siteDesignPrinciples'],
   'AG-04-MERGE': ['siteDesignPrinciples', 'coreProblemStatement'],
@@ -150,7 +184,14 @@ export async function runAgentStep(
   let cleanedText = ''
 
   try {
-    output = await agent.execute(input)
+    const timeoutMs = AGENT_TIMEOUTS[agentId] ?? 180_000
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error(`[TIMEOUT] ${agentId} が ${timeoutMs / 1000}秒 を超過しました`)), timeoutMs)
+    )
+    console.log(`[pipeline] ${agentId} 開始 (timeout=${timeoutMs / 1000}s)`)
+    const t0 = Date.now()
+    output = await Promise.race([agent.execute(input), timeoutPromise])
+    console.log(`[pipeline] ${agentId} 完了 (${((Date.now() - t0) / 1000).toFixed(1)}s)`)
     rawText = agent.lastRawText
     // コードフェンス・前後の余分なテキストを除去してJSONだけ保存する
     const fenceMatch = rawText.match(/```(?:json)?\s*([\s\S]*?)```/)
@@ -169,13 +210,23 @@ export async function runAgentStep(
     parseError = true
     parseErrorMessage = message
 
+    const isTimeout = message.startsWith('[TIMEOUT]')
     await prisma.agentResult.create({
-      data: { executionId: execution.id, agentId, outputJson: cleanedText || '', parseError: true, parseErrorMessage: message },
+      data: {
+        executionId: execution.id, agentId,
+        status: 'FAILED',
+        outputJson: '',
+        parseError: !isTimeout,
+        parseErrorMessage: message,
+        errorMessage: message,
+        completedAt: new Date(),
+      },
     })
     await prisma.execution.update({
       where: { id: execution.id },
       data: { status: 'ERROR', completedAt: new Date() },
     })
+    console.error(`[pipeline] ${agentId} 失敗: ${message}`)
     throw err
   }
 
@@ -203,11 +254,13 @@ export async function runAgentStep(
     data: {
       executionId: execution.id,
       agentId,
+      status: 'COMPLETED',
       outputJson: cleanedText || rawText,
       parseError,
       parseErrorMessage: dedupWarning
         ? `${parseErrorMessage ?? ''}\n${dedupWarning}`.trim()
         : parseErrorMessage,
+      completedAt: new Date(),
     },
   })
   await prisma.execution.update({

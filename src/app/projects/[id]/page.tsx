@@ -124,6 +124,8 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
   const [showSlides, setShowSlides] = useState(false)
   const [showFeedback, setShowFeedback] = useState(false)
   const [feedbackDone, setFeedbackDone] = useState(false)
+  const [agentStatuses, setAgentStatuses] = useState<Record<string, 'running' | 'completed' | 'failed' | 'skipped'>>({})
+  const [restarting, setRestarting] = useState(false)
 
   useEffect(() => {
     fetch(`/api/projects/${id}`).then(r => r.json()).then(setProject).catch(() => {})
@@ -200,7 +202,13 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
         if (!line.startsWith('data: ')) continue
         try {
           const event = JSON.parse(line.slice(6))
-          if (event.type === 'status') {
+          if (event.type === 'agent_start') {
+            setCurrentAG(event.agentId)
+            setAgentStatuses(prev => ({ ...prev, [event.agentId]: 'running' }))
+          } else if (event.type === 'agent_complete') {
+            setAgentStatuses(prev => ({ ...prev, [event.agentId]: event.status }))
+            if (event.status !== 'skipped') setCurrentAG(null)
+          } else if (event.type === 'status') {
             addStatus(event.message)
             const match = event.message.match(/AG-(\d+)/)
             if (match) setCurrentAG(`AG-0${match[1]}`)
@@ -251,6 +259,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
     setAllOutputs([])
     setCurrentAG('AG-01')
     setCurrentPhase(1)
+    setAgentStatuses({})
 
     const industryMap: Record<string, string> = {
       recruitment: 'ag-02-recruit', btob: 'ag-02-btob', ec: 'ag-02-ec',
@@ -333,6 +342,22 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
       setErrorMessage(err instanceof Error ? err.message : String(err))
       setAppStatus('error')
     }
+  }
+
+  const handleRestart = async () => {
+    if (!currentVersionId) return
+    if (!confirm('全ての実行結果を削除して最初からやり直しますか？')) return
+    setRestarting(true)
+    try {
+      await fetch(`/api/executions/${currentVersionId}/restart`, { method: 'POST' })
+      setAppStatus('idle')
+      setAgentStatuses({})
+      setCompletedAGs([])
+      setAllOutputs([])
+      setErrorMessage(null)
+      setStatusMessages([])
+    } catch {}
+    setRestarting(false)
   }
 
   const handleSectionEdit = (sectionId: string, newContent: string) => {
@@ -618,13 +643,35 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
                     onClick={handleCheckpointConfirm}
                     style={{ background: 'var(--ink)', color: 'var(--bg)', fontFamily: 'var(--font-d)', fontSize: '8px', fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', padding: '9px 18px', border: 'none', cursor: 'pointer', borderRadius: '2px' }}
                   >
-                    ↺ 中断箇所から再開
+                    ↺ 失敗箇所から再開
                   </button>
-                ) : (
-                  <button onClick={startPipeline} style={{ background: 'var(--ink)', color: 'var(--bg)', fontFamily: 'var(--font-d)', fontSize: '8px', fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', padding: '9px 18px', border: 'none', cursor: 'pointer', borderRadius: '2px' }}>
-                    再試行
-                  </button>
-                )}
+                ) : null}
+                <button
+                  onClick={handleRestart}
+                  disabled={restarting}
+                  style={{ background: 'transparent', color: 'var(--ink3)', fontFamily: 'var(--font-d)', fontSize: '8px', fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', padding: '9px 18px', border: '1px solid var(--line2)', cursor: restarting ? 'not-allowed' : 'pointer', borderRadius: '2px' }}
+                >
+                  {restarting ? '...' : '最初からやり直す'}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Agent progress（実行中のみ表示） */}
+          {appStatus === 'running' && Object.keys(agentStatuses).length > 0 && (
+            <div style={{ margin: '8px 40px 0', padding: '10px 14px', background: 'var(--bg2)', border: '1px solid var(--line)', borderRadius: '2px', flexShrink: 0 }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                {Object.entries(agentStatuses).map(([agId, st]) => (
+                  <span key={agId} style={{
+                    fontFamily: 'var(--font-d)', fontSize: '8px', fontWeight: 700, letterSpacing: '0.1em',
+                    padding: '3px 8px', borderRadius: '2px',
+                    background: st === 'completed' ? 'var(--dot-g)' : st === 'failed' ? 'var(--red)' : st === 'running' ? 'var(--ink)' : 'var(--line)',
+                    color: st === 'skipped' ? 'var(--ink3)' : '#fff',
+                    opacity: st === 'skipped' ? 0.5 : 1,
+                  }}>
+                    {agId}
+                  </span>
+                ))}
               </div>
             </div>
           )}

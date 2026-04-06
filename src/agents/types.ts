@@ -136,6 +136,8 @@ export type AgentSelection = {
 // Extended SSE events for Phase 2
 export type SSEEventPhase2 =
   | { type: 'status'; message: string }
+  | { type: 'agent_start'; agentId: string; label: string }
+  | { type: 'agent_complete'; agentId: string; status: 'completed' | 'failed' | 'skipped'; error?: string }
   | { type: 'complete'; output: AgentOutput; executionId: string }
   | { type: 'error'; message: string }
   | { type: 'checkpoint'; checkpointId: string; phase: 1 | 2 | 3 | 4; outputs?: AgentOutput[]; recommendation?: AgentRecommendation; output?: AgentOutput }

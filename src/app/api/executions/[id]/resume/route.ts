@@ -102,12 +102,21 @@ export async function POST(
       // 完了済みならスキップ、未完了なら実行して previousOutputs に追加
       const run = async (agentId: AgentId, label: string): Promise<AgentOutput> => {
         if (completedAgIds.includes(agentId)) {
+          send({ type: 'agent_complete', agentId, status: 'skipped' })
           return prevOutputMap[agentId]
         }
+        send({ type: 'agent_start', agentId, label })
         send({ type: 'status', message: `${label} 実行中...` })
-        const output = await runAgentStep(versionId, agentId, { projectContext, previousOutputs }, config)
-        previousOutputs.push(output)
-        return output
+        try {
+          const output = await runAgentStep(versionId, agentId, { projectContext, previousOutputs }, config)
+          previousOutputs.push(output)
+          send({ type: 'agent_complete', agentId, status: 'completed' })
+          return output
+        } catch (err) {
+          const errorMsg = err instanceof Error ? err.message : String(err)
+          send({ type: 'agent_complete', agentId, status: 'failed', error: errorMsg })
+          throw err
+        }
       }
 
       /**
