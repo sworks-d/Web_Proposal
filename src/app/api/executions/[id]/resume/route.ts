@@ -4,6 +4,7 @@ import { runAgentStep, setVersionStatus, getVersionOutputs } from '@/lib/pipelin
 import { safeParseJson } from '@/lib/json-cleaner'
 import { detectFeedbackTarget, extractAG05Targets } from '@/lib/auto-feedback'
 import { PipelineConfig, ProjectContext, AgentOutput, AgentId } from '@/agents/types'
+import { isStopRequested, clearStop } from '@/lib/execution-control'
 
 export const maxDuration = 600 // 10分
 
@@ -99,8 +100,15 @@ export async function POST(
       const send = (event: unknown) =>
         controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`))
 
+      // 停止フラグをクリアしてから開始
+      clearStop(versionId)
+
       // 完了済みならスキップ、未完了なら実行して previousOutputs に追加
       const run = async (agentId: AgentId, label: string): Promise<AgentOutput> => {
+        // 停止リクエストがあれば中断
+        if (isStopRequested(versionId)) {
+          throw new Error('STOP_REQUESTED')
+        }
         if (completedAgIds.includes(agentId)) {
           send({ type: 'agent_complete', agentId, status: 'skipped' })
           return prevOutputMap[agentId]
@@ -357,9 +365,16 @@ export async function POST(
         }
 
       } catch (err) {
-        await setVersionStatus(versionId, 'ERROR')
-        send({ type: 'error', message: err instanceof Error ? err.message : 'Unknown error' })
+        const msg = err instanceof Error ? err.message : 'Unknown error'
+        if (msg === 'STOP_REQUESTED') {
+          await setVersionStatus(versionId, 'ERROR')
+          send({ type: 'error', message: '実行を停止しました。「失敗箇所から再開」でここから続けられます。' })
+        } else {
+          await setVersionStatus(versionId, 'ERROR')
+          send({ type: 'error', message: msg })
+        }
       } finally {
+        clearStop(versionId)
         controller.close()
       }
     },

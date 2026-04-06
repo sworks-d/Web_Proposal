@@ -126,6 +126,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
   const [feedbackDone, setFeedbackDone] = useState(false)
   const [agentStatuses, setAgentStatuses] = useState<Record<string, 'running' | 'completed' | 'failed' | 'skipped'>>({})
   const [restarting, setRestarting] = useState(false)
+  const [stopping, setStopping] = useState(false)
 
   useEffect(() => {
     fetch(`/api/projects/${id}`).then(r => r.json()).then(setProject).catch(() => {})
@@ -342,6 +343,15 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
       setErrorMessage(err instanceof Error ? err.message : String(err))
       setAppStatus('error')
     }
+  }
+
+  const handleStop = async () => {
+    if (!currentVersionId || stopping) return
+    setStopping(true)
+    try {
+      await fetch(`/api/executions/${currentVersionId}/stop`, { method: 'POST' })
+    } catch {}
+    setStopping(false)
   }
 
   const handleRestart = async (fromAgentId?: string) => {
@@ -590,6 +600,24 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
             >
               {appStatus === 'running' ? '実行中...' : 'フルパイプライン実行 →'}
             </button>
+            {appStatus === 'running' && (
+              <button
+                onClick={handleStop}
+                disabled={stopping}
+                style={{
+                  width: '100%', marginTop: '6px',
+                  background: 'transparent',
+                  color: 'var(--red)',
+                  border: '1px solid var(--red)',
+                  fontFamily: 'var(--font-d)', fontSize: '8px', fontWeight: 700,
+                  letterSpacing: '0.15em', textTransform: 'uppercase',
+                  padding: '9px', cursor: stopping ? 'not-allowed' : 'pointer',
+                  borderRadius: '2px', opacity: stopping ? 0.5 : 1,
+                }}
+              >
+                {stopping ? '停止中...' : '■ 停止'}
+              </button>
+            )}
             {statusMessages.length > 0 && (
               <div style={{ marginTop: '10px' }}>
                 {statusMessages.slice(-5).map((m, i) => (
