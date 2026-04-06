@@ -344,12 +344,19 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
     }
   }
 
-  const handleRestart = async () => {
+  const handleRestart = async (fromAgentId?: string) => {
     if (!currentVersionId) return
-    if (!confirm('全ての実行結果を削除して最初からやり直しますか？')) return
+    const msg = fromAgentId
+      ? `${fromAgentId} 以降の結果を削除してここから再実行しますか？`
+      : '全ての実行結果を削除して最初からやり直しますか？'
+    if (!confirm(msg)) return
     setRestarting(true)
     try {
-      await fetch(`/api/executions/${currentVersionId}/restart`, { method: 'POST' })
+      await fetch(`/api/executions/${currentVersionId}/restart`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(fromAgentId ? { fromAgentId } : {}),
+      })
       setAppStatus('idle')
       setAgentStatuses({})
       setCompletedAGs([])
@@ -647,7 +654,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
                   </button>
                 ) : null}
                 <button
-                  onClick={handleRestart}
+                  onClick={() => handleRestart()}
                   disabled={restarting}
                   style={{ background: 'transparent', color: 'var(--ink3)', fontFamily: 'var(--font-d)', fontSize: '8px', fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', padding: '9px 18px', border: '1px solid var(--line2)', cursor: restarting ? 'not-allowed' : 'pointer', borderRadius: '2px' }}
                 >
@@ -657,21 +664,37 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
             </div>
           )}
 
-          {/* Agent progress（実行中のみ表示） */}
-          {appStatus === 'running' && Object.keys(agentStatuses).length > 0 && (
+          {/* Agent progress（実行中・エラー時に表示） */}
+          {(appStatus === 'running' || appStatus === 'error') && Object.keys(agentStatuses).length > 0 && (
             <div style={{ margin: '8px 40px 0', padding: '10px 14px', background: 'var(--bg2)', border: '1px solid var(--line)', borderRadius: '2px', flexShrink: 0 }}>
+              {appStatus === 'error' && (
+                <div style={{ fontFamily: 'var(--font-d)', fontSize: '8px', color: 'var(--ink3)', letterSpacing: '0.1em', marginBottom: '8px' }}>
+                  各AGをクリックして、そこから再実行できます
+                </div>
+              )}
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                {Object.entries(agentStatuses).map(([agId, st]) => (
-                  <span key={agId} style={{
-                    fontFamily: 'var(--font-d)', fontSize: '8px', fontWeight: 700, letterSpacing: '0.1em',
-                    padding: '3px 8px', borderRadius: '2px',
-                    background: st === 'completed' ? 'var(--dot-g)' : st === 'failed' ? 'var(--red)' : st === 'running' ? 'var(--ink)' : 'var(--line)',
-                    color: st === 'skipped' ? 'var(--ink3)' : '#fff',
-                    opacity: st === 'skipped' ? 0.5 : 1,
-                  }}>
-                    {agId}
-                  </span>
-                ))}
+                {Object.entries(agentStatuses).map(([agId, st]) => {
+                  const isClickable = appStatus === 'error' && !restarting
+                  return (
+                    <span
+                      key={agId}
+                      title={isClickable ? `${agId} から再実行` : undefined}
+                      onClick={isClickable ? () => handleRestart(agId) : undefined}
+                      style={{
+                        fontFamily: 'var(--font-d)', fontSize: '8px', fontWeight: 700, letterSpacing: '0.1em',
+                        padding: '3px 8px', borderRadius: '2px',
+                        background: st === 'completed' ? 'var(--dot-g)' : st === 'failed' ? 'var(--red)' : st === 'running' ? 'var(--ink)' : 'var(--line)',
+                        color: st === 'skipped' ? 'var(--ink3)' : '#fff',
+                        opacity: st === 'skipped' ? 0.5 : 1,
+                        cursor: isClickable ? 'pointer' : 'default',
+                        outline: isClickable && st === 'failed' ? '2px solid var(--red)' : 'none',
+                        outlineOffset: '2px',
+                      }}
+                    >
+                      {agId}
+                    </span>
+                  )
+                })}
               </div>
             </div>
           )}
