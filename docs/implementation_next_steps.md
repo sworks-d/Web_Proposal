@@ -1,294 +1,223 @@
 # 次の実装指示（優先順位順）
 
 Claude Code はこのファイルを読んで、上から順番に実装してください。
-各タスクには「対象ファイル」「変更内容」「確認方法」を明記しています。
 
 ---
 
-## Task 1: max_tokens のAG別設定【最優先・1ファイルの修正のみ】
+## Task 1: ag-04-insight.ts の IDバグ修正【最優先・1行の修正のみ】
 
 ### 現状の問題
-`src/lib/anthropic-client.ts` の `callClaude` 関数に `max_tokens: 4096` がハードコードされている。
-AG-02〜07の各サブAGは出力量が多く4096では足りず、途中で切れている。
-
-### 対象ファイル
-`src/lib/anthropic-client.ts`
+`src/agents/ag-04-insight.ts` の `id: AgentId = 'AG-04'` になっている。
+AG-04-INSIGHTとして動作すべきだが AG-04 のIDで動いている。
 
 ### 変更内容
-
 ```typescript
-// 変更前（現在）
-export async function callClaude(
-  system: string,
-  user: string,
-  modelType: ModelType = 'fast'
-): Promise<string> {
-  const res = await anthropic.messages.create({
-    model: getModel(modelType),
-    max_tokens: 4096,   // ← ここが問題
-    system,
-    messages: [{ role: 'user', content: user }],
-  })
-  ...
-}
-
-// 変更後
-export const AG_MAX_TOKENS: Record<string, number> = {
-  // AG-02系
-  'AG-02':          4096,
-  'AG-02-STP':      4096,
-  'AG-02-JOURNEY':  4096,
-  'AG-02-VPC':      4096,
-  'AG-02-MERGE':    4096,
-  // AG-03系
-  'AG-03':          4096,
-  'AG-03-HEURISTIC':  8192,
-  'AG-03-HEURISTIC2': 4096,
-  'AG-03-GAP':        4096,
-  'AG-03-DATA':       4096,
-  'AG-03-MERGE':      4096,
-  // AG-04系
-  'AG-04':          6144,
-  'AG-04-MAIN':     8192,
-  'AG-04-INSIGHT':  6144,
-  'AG-04-MERGE':    4096,
-  // AG-05〜07
-  'AG-05':          4096,
-  'AG-06':          8192,
-  'AG-07':          8192,
-  'AG-07A':         8192,
-  'AG-07B':         4096,
-  'AG-07C':         16384,
-}
-
-export async function callClaude(
-  system: string,
-  user: string,
-  modelType: ModelType = 'fast',
-  agentId?: string
-): Promise<string> {
-  const maxTokens = agentId ? (AG_MAX_TOKENS[agentId] ?? 4096) : 4096
-  const res = await anthropic.messages.create({
-    model: getModel(modelType),
-    max_tokens: maxTokens,
-    system,
-    messages: [{ role: 'user', content: user }],
-  })
-  const block = res.content[0]
-  if (block.type !== 'text') throw new Error('Unexpected response type')
-  return block.text
-}
-```
-
-### base-agent.ts の修正（callClaudeを呼んでいる箇所）
-
-```typescript
-// src/agents/base-agent.ts の execute() 内
+// src/agents/ag-04-insight.ts
 // 変更前
-const raw = await callClaude(system, user, this.modelType)
+id: AgentId = 'AG-04'
 
 // 変更後
-const raw = await callClaude(system, user, this.modelType, this.id)
+id: AgentId = 'AG-04-INSIGHT'
 ```
 
-### 確認方法
-```bash
-npm run dev
-# 新規案件でフルパイプライン実行
-# AG-02-STP・AG-04-MAIN・AG-07C の出力が途中で切れないことを確認
+### types.ts への追加
+```typescript
+// src/agents/types.ts に追加
+| 'AG-04-INSIGHT'
 ```
 
 ---
 
-## Task 2: sectionsラッパーの除去【AG出力が空表示になる根本原因】
+## Task 2: 新AGのクラスファイルを作成する
 
-### 現状の問題
-全AGが `{ agentId, sections: [{ content: rawText }] }` の形で保存している。
-`output-renderer.ts` のマッパーが参照するフィールドが存在しないため空表示になる。
-新しく作成したAG-02-STP等も同じパターンを踏襲しているため同じ問題が発生する。
+### 新規作成が必要なAGクラス
 
-### 対象ファイル
-`src/agents/base-agent.ts`（共通処理を変更する）
-`src/agents/ag-02-stp.ts` 以下の全新AGファイル（parseOutputを修正）
+以下のプロンプトファイルに対応するエージェントクラスを作成する：
 
-### 変更内容
-
-base-agent.ts の saveOutput または execute の保存処理：
-
-```typescript
-// 変更前
-await prisma.agentResult.create({
-  data: {
-    executionId: execution.id,
-    agentId: this.id,
-    outputJson: JSON.stringify({
-      agentId: this.id,
-      sections: [{ id: 'raw', content: raw, ... }]
-    }),
-  }
-})
-
-// 変更後：生テキストをそのまま保存
-await prisma.agentResult.create({
-  data: {
-    executionId: execution.id,
-    agentId: this.id,
-    outputJson: raw,  // sectionsラッパーなし・生テキストをそのまま
-  }
-})
+```
+prompts/ag-01-research/default.md  → src/agents/ag-01-research.ts
+prompts/ag-01-merge/default.md     → src/agents/ag-01-merge.ts
+prompts/ag-02-position/default.md  → src/agents/ag-02-position.ts
+prompts/ag-07c-1/default.md        → src/agents/ag-07c-1.ts
+prompts/ag-07c-2/default.md        → src/agents/ag-07c-2.ts
+prompts/ag-07c-3/default.md        → src/agents/ag-07c-3.ts
+prompts/ag-07c-4/default.md        → src/agents/ag-07c-4.ts
 ```
 
-各AGの parseOutput は削除またはシンプル化する：
+### max_tokens設定（base-agent.tsのAG_MAX_TOKENSに追加）
+
 ```typescript
-// parseOutput は保存には使わず、表示用の変換は output-renderer.ts が担当する
-parseOutput(raw: string): AgentOutput {
-  // 何もしない or 最低限の実装
-  return { agentId: this.id, sections: [], visualizations: [], metadata: { confidence: 'medium', factBasis: [], assumptions: [], missingInfo: [] } }
+'AG-01-RESEARCH': 8192,
+'AG-01-MERGE':    4096,
+'AG-02-POSITION': 8192,
+'AG-07C-1': 8192,
+'AG-07C-2': 8192,  // 最重要章・最大トークン
+'AG-07C-3': 6144,
+'AG-07C-4': 4096,
+```
+
+### AG-01-RESEARCHのweb_search対応（重要）
+
+AG-01-RESEARCHはweb_searchツールを使用するため、
+callClaudeではなく直接anthropic.messages.createを呼ぶ特殊なexecute()が必要。
+
+```typescript
+// src/agents/ag-01-research.ts
+import anthropic from '@/lib/anthropic-client'
+
+export class Ag01ResearchAgent extends BaseAgent {
+  id: AgentId = 'AG-01-RESEARCH'
+  name = '会社情報リサーチ'
+  protected modelType = 'quality' as const
+
+  async execute(input: AgentInput): Promise<AgentOutput> {
+    const system = this.getPrompt(input.projectContext)
+    const user = this.buildUserMessage(input)
+
+    const res = await anthropic.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 8192,
+      system,
+      messages: [{ role: 'user', content: user }],
+      tools: [
+        {
+          type: 'web_search_20260209',
+          name: 'web_search',
+          max_uses: 15,
+        }
+      ],
+    })
+
+    // tool_useとtextブロックを統合して生テキストを取得
+    const rawText = res.content
+      .filter(b => b.type === 'text')
+      .map(b => b.text)
+      .join('\n')
+
+    this.lastRawText = rawText
+    return this.parseOutput(rawText)
+  }
 }
-```
-
-### 修正後の確認
-```bash
-npx prisma db push --force-reset
-npm run dev
-# 新規案件を作成してフルパイプライン実行
-# DevToolsで /api/versions/{id} のレスポンスを確認：
-#   executions[].results[].outputJson が { "segmentation": ... } の形になっていること
-#   （sectionsラッパーが消えていること）
 ```
 
 ---
 
-## Task 3: 新AG（AG-02-STP/JOURNEY/VPC/MERGE等）をパイプラインに組み込む
-
-### 現状の問題
-エージェントクラスは作成されたが、
-パイプラインの実行順序・並列実行・MERGEの待機処理が実装されていない。
+## Task 3: パイプラインを更新する
 
 ### 実行順序の設計
 
 ```
-AG-01（インテーク）
-  ↓
-AG-02-MAIN（市場骨格）
-AG-02-STP    ←── 並列実行（AG-02-MAIN完了後）
-AG-02-JOURNEY ←── 並列実行
-AG-02-VPC    ←── 並列実行
-  ↓（全て完了後）
-AG-02-MERGE
-
-AG-03-MAIN（競合特定）
-AG-03-HEURISTIC  ←── 並列実行（AG-03-MAIN完了後）
-AG-03-HEURISTIC2 ←── 並列実行
-AG-03-GAP        ←── 並列実行
-AG-03-DATA       ←── 並列実行（inputPattern=Cの時のみ）
-  ↓（全て完了後）
-AG-03-MERGE
-
-AG-04-MAIN    ←── 並列実行（AG-02-MERGE + AG-03-MERGE完了後）
-AG-04-INSIGHT ←── 並列実行
-  ↓（全て完了後）
-AG-04-MERGE
-
-AG-05（ファクトチェック）
-  ↓
-AG-06（設計草案）
-  ↓
-AG-07A（設計分析）
-AG-07B（汎用知見） ←── 並列実行（AG-06完了後）
-  ↓（全て完了後）
-AG-07C（素材セット）
+Phase 0（新規）: AG-01 → AG-01-RESEARCH → AG-01-MERGE → CHECKPOINT
+Phase 1: AG-02クラスター + AG-02-POSITION（並列）→ AG-02-MERGE → AG-03クラスター → AG-03-MERGE → CHECKPOINT
+Phase 2: AG-04クラスター → AG-04-MERGE → AG-05 → CHECKPOINT
+Phase 3: AG-06 → AG-07A/AG-07B（並列）→ AG-07C-1/AG-07C-2/AG-07C-3（並列）→ AG-07C-4 → COMPLETED
 ```
 
-### 対象ファイル
-`src/app/api/executions/[id]/resume/route.ts`
-`src/app/api/executions/pipeline/route.ts`
-`src/agents/types.ts`
+### resume/route.ts の主な変更点
 
-### AgentId の追加（types.ts）
+```typescript
+// Phase 0追加
+const ag01 = await run('AG-01', 'AG-01 インテーク')
+const ag01Research = await run('AG-01-RESEARCH', 'AG-01-RESEARCH 会社情報リサーチ')
+const ag01Merge = await run('AG-01-MERGE', 'AG-01-MERGE インテーク統合')
+send({ type: 'checkpoint', versionId, phase: 1, ... })
+
+// Phase 1: AG-02クラスター + AG-02-POSITION並列
+const [ag02, ag02Stp, ag02Journey, ag02Vpc, ag02Position] = await Promise.all([
+  run('AG-02', ...),
+  run('AG-02-STP', ...),
+  run('AG-02-JOURNEY', ...),
+  run('AG-02-VPC', ...),
+  run('AG-02-POSITION', 'AG-02-POSITION 4軸ポジショニング'),  // 追加
+])
+const ag02Merge = await run('AG-02-MERGE', ...)
+
+// Phase 3: AG-07C並列化
+const [ag07a, ag07b] = await Promise.all([
+  run('AG-07A', ...),
+  run('AG-07B', ...),
+])
+// AG-07C-1/2/3を並列実行
+const [ag07c1, ag07c2, ag07c3] = await Promise.all([
+  run('AG-07C-1', 'AG-07C-1 素材セット Ch.01〜02'),
+  run('AG-07C-2', 'AG-07C-2 素材セット Ch.03〜04'),
+  run('AG-07C-3', 'AG-07C-3 素材セット Ch.05〜06'),
+])
+const ag07c4 = await run('AG-07C-4', 'AG-07C-4 サマリー・conceptWords')
+```
+
+### types.ts への追加
 
 ```typescript
 export type AgentId =
-  | 'AG-01'
-  | 'AG-02' | 'AG-02-STP' | 'AG-02-JOURNEY' | 'AG-02-VPC' | 'AG-02-MERGE'
+  | 'AG-01' | 'AG-01-RESEARCH' | 'AG-01-MERGE'
+  | 'AG-02' | 'AG-02-STP' | 'AG-02-JOURNEY' | 'AG-02-VPC' | 'AG-02-MERGE' | 'AG-02-POSITION'
   | 'AG-03' | 'AG-03-HEURISTIC' | 'AG-03-HEURISTIC2' | 'AG-03-GAP' | 'AG-03-DATA' | 'AG-03-MERGE'
   | 'AG-04' | 'AG-04-MAIN' | 'AG-04-INSIGHT' | 'AG-04-MERGE'
   | 'AG-05'
   | 'AG-06'
-  | 'AG-07' | 'AG-07A' | 'AG-07B' | 'AG-07C'
+  | 'AG-07' | 'AG-07A' | 'AG-07B' | 'AG-07C' | 'AG-07C-1' | 'AG-07C-2' | 'AG-07C-3' | 'AG-07C-4'
 ```
 
-### resume/route.ts の並列実行パターン
+### サイドバーのAGリスト更新
 
 ```typescript
-// Phase 2: AG-02系（並列）
-const [ag02Main, ag02Stp, ag02Journey, ag02Vpc] = await Promise.all([
-  runOrSkip(versionId, 'AG-02', ...),
-  runOrSkip(versionId, 'AG-02-STP', ...),
-  runOrSkip(versionId, 'AG-02-JOURNEY', ...),
-  runOrSkip(versionId, 'AG-02-VPC', ...),
-])
-const ag02Merge = await runOrSkip(versionId, 'AG-02-MERGE', ...)
-
-// AG-03-DATAはinputPattern=Cの時のみ
-const ag01Output = safeParseJson(ag01Result.outputJson)
-const runData = ag01Output?.inputPattern === 'C'
-
-const [ag03Main, ag03Heuristic, ag03Heuristic2, ag03Gap, ag03Data] = await Promise.all([
-  runOrSkip(versionId, 'AG-03', ...),
-  runOrSkip(versionId, 'AG-03-HEURISTIC', ...),
-  runOrSkip(versionId, 'AG-03-HEURISTIC2', ...),
-  runOrSkip(versionId, 'AG-03-GAP', ...),
-  runData ? runOrSkip(versionId, 'AG-03-DATA', ...) : Promise.resolve(null),
-])
-const ag03Merge = await runOrSkip(versionId, 'AG-03-MERGE', ...)
-
-// Phase 3: AG-04系（並列）
-const [ag04Main, ag04Insight] = await Promise.all([
-  runOrSkip(versionId, 'AG-04-MAIN', ...),
-  runOrSkip(versionId, 'AG-04-INSIGHT', ...),
-])
-const ag04Merge = await runOrSkip(versionId, 'AG-04-MERGE', ...)
-
-// Phase 4: AG-05 → AG-06
-const ag05 = await runOrSkip(versionId, 'AG-05', ...)
-const ag06 = await runOrSkip(versionId, 'AG-06', ...)
-
-// Phase 5: AG-07A/B並列 → AG-07C
-const [ag07a, ag07b] = await Promise.all([
-  runOrSkip(versionId, 'AG-07A', ...),
-  runOrSkip(versionId, 'AG-07B', ...),
-])
-const ag07c = await runOrSkip(versionId, 'AG-07C', ...)
+const AG_LIST = [
+  { id: 'AG-01',         label: 'インテーク' },
+  { id: 'AG-01-RESEARCH',label: 'リサーチ' },
+  { id: 'AG-01-MERGE',   label: 'インテーク統合' },
+  { id: 'AG-02',         label: '市場分析' },
+  { id: 'AG-02-STP',     label: 'STP分析' },
+  { id: 'AG-02-JOURNEY', label: 'ジャーニー' },
+  { id: 'AG-02-VPC',     label: 'VPC分析' },
+  { id: 'AG-02-POSITION',label: '4軸ポジション' },
+  { id: 'AG-02-MERGE',   label: '市場統合' },
+  { id: 'AG-03',         label: '競合分析' },
+  { id: 'AG-03-HEURISTIC',  label: '競合UX評価①' },
+  { id: 'AG-03-HEURISTIC2', label: '競合UX評価②' },
+  { id: 'AG-03-GAP',     label: 'コンテンツGAP' },
+  { id: 'AG-03-DATA',    label: 'データ分析' },
+  { id: 'AG-03-MERGE',   label: '競合統合' },
+  { id: 'AG-04-MAIN',    label: '課題定義' },
+  { id: 'AG-04-INSIGHT', label: 'インサイト' },
+  { id: 'AG-04-MERGE',   label: '課題統合' },
+  { id: 'AG-05',         label: 'ファクトチェック' },
+  { id: 'AG-06',         label: '設計草案' },
+  { id: 'AG-07A',        label: '設計分析' },
+  { id: 'AG-07B',        label: '汎用知見' },
+  { id: 'AG-07C-1',      label: '素材 Ch.01-02' },
+  { id: 'AG-07C-2',      label: '素材 Ch.03-04' },
+  { id: 'AG-07C-3',      label: '素材 Ch.05-06' },
+  { id: 'AG-07C-4',      label: '素材 サマリー' },
+]
 ```
 
-### 確認方法
+---
+
+## Task 4: chartDataの共通レンダラーを実装する
+
+### 実装場所
+`src/components/pipeline/ChartRenderer.tsx`（新規作成）
+
+### 対応するchartData.type
+```typescript
+type ChartType = 'bar' | 'scatter' | 'radar' | 'heatmap'
+
+// Chart.jsを使って自動描画する
+// chartData.typeを見て適切なチャートを描画する
+// isClient: true のデータポイントを強調表示する
+// clientIndex で強調バーを設定する
+```
+
+### 使用ライブラリ
 ```bash
-npm run dev
-# 新規案件を作成してフルパイプライン実行
-# サイドバーに AG-02-STP / AG-02-JOURNEY 等が表示されることを確認
-# 並列実行されていることをログで確認
+npm install chart.js react-chartjs-2
 ```
 
 ---
 
-## Task 4: サイドバーAGから完了データへのアクセス
-
-詳細は `docs/implementation_output_display.md` の Section 10 を参照。
-
-## Task 5: AG実行中のプロセス可視化（SSEストリーミング）
-
-詳細は `docs/implementation_output_display.md` の Section 12 を参照。
-
----
-
-## 実装順序のまとめ
+## 実装順序まとめ
 
 ```
-Task 1 → Task 2 → Task 3 → Task 4 → Task 5 の順で進める。
-
-Task 1 は1ファイル・数行の修正なので最初に完了させる。
-Task 2 は Task 1 完了後に npx prisma db push --force-reset を実行してから進める。
-Task 3 は Task 2 の出力形式が正しくなってから実装する。
-Task 4・5 は Task 3 の並列実行が動いてから実装する。
+Task 1（1行修正・即実行）→ Task 2（AGクラス作成）→ Task 3（パイプライン更新）→ Task 4（チャートレンダラー）
 ```

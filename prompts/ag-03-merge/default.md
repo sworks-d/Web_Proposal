@@ -13,6 +13,9 @@ AG-03-HEURISTIC / HEURISTIC2 / GAP / DATA の4つが独立して動いた。
 これら3層の分析が「同じ結論を指しているか」「矛盾しているか」を確認し、
 「クライアントの差別化設計の優先順位」として1つの答えを出すのがこのAGの仕事。
 
+**重要：siteDesignPrinciples はAG-02-MERGEで確定済み。このAGは生成しない。**
+競合分析から判明した「追加・修正すべき原則」があればsiteDesignAdditionsに出力する。
+
 ---
 
 ## Layer 1：目的の3層
@@ -40,8 +43,7 @@ Ch.01「市場環境」とCh.03「解決の方向性」の論拠になる。
   → 同じ競合のCTAについて逆の評価をしている場合は矛盾
 
 解消方法：
-  実際にサイトを再確認して正しい評価を採用する（どちらかが見落としている可能性）
-  またはスコープが違う（CTAの文言 vs CTAページの存在）場合は両方正しいとして整合させる
+  実際にサイトを再確認して正しい評価を採用する
 
 ### 差別化優先順位の判断基準
 
@@ -74,10 +76,11 @@ topDesignOpportunitiesの優先順位は以下の3軸で評価する：
 重複するものを1つに統合する。
 3軸（feasibility・differentiability・cvImpact）で評価して優先順位をつける。
 
-### Task 3：siteDesignPrinciplesを定義する
+### Task 3：siteDesignAdditionsを確認する（追加・修正のみ）
 
-全分析から「このサイトが競合との差別化として守るべき設計原則」を3〜5つ定める。
-各原則に「どのサブAGのどの分析から導かれるか」を明示する。
+AG-02-MERGEのsiteDesignPrinciplesを参照する。
+競合分析から「追加すべき原則」または「修正すべき原則」があれば出力する。
+なければempty配列を返す。既存原則の再出力は禁止。
 
 ### Task 4：AG-04・AG-06へのインプットを作成する
 
@@ -93,11 +96,11 @@ forAG06：
 ## Layer 4：品質基準
 
 ✓ 矛盾チェックが3項目全て実施されている
-✓ topDesignOpportunitiesが3軸（feasibility・differentiability・cvImpact）で評価されている
-✓ siteDesignPrinciplesに根拠となるサブAGが明示されている
+✓ topDesignOpportunitiesが3軸で評価されている
+✓ siteDesignAdditionsは追加・修正分のみ（既存の再出力はNG）
 ✓ forAG04とforAG06が即座に使える具体的な内容になっている
 
-✗ サブAGの内容を要約するだけのMERGEはNG
+✗ AG-02-MERGEのsiteDesignPrinciplesを丸ごとコピーして再出力するのはNG
 ✗ 矛盾を発見しているのに両方を並べて解消しないのはNG
 
 ---
@@ -147,8 +150,14 @@ JSONのみ。コードフェンス・説明文・前置き不要。
     "thingsToAvoid": ["競合と被ってはいけない設計"]
   },
 
-  "siteDesignPrinciples": [
-    {"principle": "〜すべきである", "rationale": "どのサブAGのどの分析から", "priority": "high|medium|low"}
+  "siteDesignAdditions": [
+    {
+      "action": "add|modify",
+      "targetPrinciple": "既存原則のIDまたはnull（追加の場合）",
+      "principle": "追加・修正する設計原則（〜すべきである）",
+      "rationale": "競合分析からこの原則が必要になった理由",
+      "priority": "high|medium|low"
+    }
   ],
 
   "forAG04": "5 Whysの起点となる競合分析の最重要発見",

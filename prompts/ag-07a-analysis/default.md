@@ -81,7 +81,7 @@ AG-02-MERGEから：
   - primaryTarget・targetContextualState（訪問者の状態）
   - consolidatedJourney.criticalBarrier（最重要離脱障壁）
   - topPainRelievers（Pain解消の設計根拠）
-  - siteDesignPrinciples（設計原則）
+  - siteDesignPrinciples（AG-02-MERGEで確定済み・参照のみ・再生成しない）
 
 AG-03-MERGEから：
   - topDesignOpportunities（差別化設計の機会）
