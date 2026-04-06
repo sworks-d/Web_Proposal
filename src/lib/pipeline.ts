@@ -125,6 +125,7 @@ export async function runAgentStep(
     case 'AG-03-HEURISTIC2': agent = new Ag03Heuristic2Agent(); break
     case 'AG-03-MERGE': agent = new Ag03MergeAgent(); break
     case 'AG-04': agent = new Ag04InsightAgent(); break
+    case 'AG-04-INSIGHT': agent = new Ag04InsightAgent(); break
     case 'AG-04-MAIN': agent = new Ag04MainAgent(); break
     case 'AG-04-MERGE': agent = new Ag04MergeAgent(); break
     case 'AG-05': agent = new Ag05FactcheckAgent(); break
