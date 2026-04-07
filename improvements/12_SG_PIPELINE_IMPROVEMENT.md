@@ -575,3 +575,269 @@ protected parseOutput(raw: string): unknown {
   }
 }
 ```
+
+---
+
+## G. A4サイズ選択（ヨコ/タテ）
+
+### パラメータ追加
+
+**src/agents/sg-types.ts:**
+
+```typescript
+export type SlideOrientation = 'landscape' | 'portrait'
+
+export interface SgParams {
+  type: SlideProposalType
+  slideCount: number
+  focusChapters: FocusChapter[]
+  tone: SlideTone
+  audience: SlideAudience
+  orientation: SlideOrientation  // ← 追加
+}
+```
+
+### UI追加
+
+**SlideGeneratorPanel.tsx または /projects/[id]/slides/page.tsx:**
+
+```tsx
+const ORIENTATIONS: { value: SlideOrientation; label: string; desc: string }[] = [
+  { value: 'landscape', label: 'A4ヨコ', desc: '16:9相当・プレゼン向き' },
+  { value: 'portrait',  label: 'A4タテ', desc: '報告書・印刷向き' },
+]
+
+const [orientation, setOrientation] = useState<SlideOrientation>('landscape')
+```
+
+### pptx-generator.ts 修正
+
+```typescript
+// サイズ定数
+const SIZES = {
+  landscape: { w: 10, h: 7.5 },      // A4ヨコ相当（インチ）
+  portrait:  { w: 7.5, h: 10 },      // A4タテ相当（インチ）
+}
+
+export function generatePptx(output: SgFinalOutput, orientation: SlideOrientation = 'landscape'): PptxGenJS {
+  const pptx = new PptxGenJS()
+  const size = SIZES[orientation]
+  
+  pptx.defineLayout({ name: 'A4', width: size.w, height: size.h })
+  pptx.layout = 'A4'
+  
+  // 以降のレイアウト計算もsize.w, size.hを使う
+  // ...
+}
+```
+
+### PDF出力
+
+pptxgenjsはPDF出力をサポートしていないため、以下の選択肢:
+
+**案A: pptx → PDF変換サービス**
+- LibreOffice (headless) をサーバーに入れて変換
+- `libreoffice --headless --convert-to pdf input.pptx`
+
+**案B: PDFを直接生成（pdf-lib）**
+- pptxとは別にpdf-libでPDFを直接生成
+- レイアウトロジックを共通化
+
+**推奨**: 案Aが実装コスト低い。Dockerで `libreoffice` を使えるようにする。
+
+```typescript
+// src/lib/pdf-converter.ts
+import { execSync } from 'child_process'
+import { writeFileSync, readFileSync, unlinkSync } from 'fs'
+import { join } from 'path'
+import { tmpdir } from 'os'
+
+export async function convertPptxToPdf(pptxBuffer: Buffer): Promise<Buffer> {
+  const tmpDir = tmpdir()
+  const inputPath = join(tmpDir, `slide_${Date.now()}.pptx`)
+  const outputPath = inputPath.replace('.pptx', '.pdf')
+  
+  writeFileSync(inputPath, pptxBuffer)
+  
+  try {
+    execSync(`libreoffice --headless --convert-to pdf --outdir ${tmpDir} ${inputPath}`, {
+      timeout: 60000,
+    })
+    const pdfBuffer = readFileSync(outputPath)
+    return pdfBuffer
+  } finally {
+    try { unlinkSync(inputPath) } catch {}
+    try { unlinkSync(outputPath) } catch {}
+  }
+}
+```
+
+---
+
+## H. ページ単位の修正機能
+
+完成したPDFに対してページ指定で修正指示を出し、該当スライドのみ再生成する。
+
+### データ構造
+
+```typescript
+interface SlideRevisionRequest {
+  sgGenerationId: string
+  pageNumber: number       // 1-indexed
+  instruction: string      // 修正指示
+}
+
+interface SlideRevisionResult {
+  pageNumber: number
+  before: SgFinalSlide
+  after: SgFinalSlide
+}
+```
+
+### API
+
+**POST /api/sg-generation/[id]/revise**
+
+```typescript
+export async function POST(req: Request, { params }: { params: { id: string } }) {
+  const { pageNumber, instruction } = await req.json()
+  
+  const sg = await prisma.sgGeneration.findUnique({ where: { id: params.id } })
+  if (!sg || sg.status !== 'COMPLETED') {
+    return Response.json({ error: 'Not found or not completed' }, { status: 404 })
+  }
+  
+  const output = JSON.parse(sg.outputJson) as SgFinalOutput
+  const targetSlide = output.slides[pageNumber - 1]  // 0-indexed
+  
+  if (!targetSlide) {
+    return Response.json({ error: 'Invalid page number' }, { status: 400 })
+  }
+  
+  // SG-04を該当スライドのみ再実行
+  const revisedSlide = await reviseSlide(targetSlide, instruction, output.concept, sg.params)
+  
+  // 出力を更新
+  output.slides[pageNumber - 1] = revisedSlide
+  
+  await prisma.sgGeneration.update({
+    where: { id: params.id },
+    data: { outputJson: JSON.stringify(output) },
+  })
+  
+  return Response.json({ success: true, slide: revisedSlide })
+}
+```
+
+### 修正専用エージェント
+
+**src/agents/sg-revise.ts:**
+
+```typescript
+export class SgReviseAgent extends SgBaseAgent {
+  id = 'SG-REVISE' as SgAgentId
+  name = 'スライド修正'
+  protected modelType = 'quality' as const
+  protected maxTokens = 2048
+
+  getSystemPrompt(): string {
+    return `あなたは提案書スライドの修正担当です。
+指定されたスライドを、修正指示に従って改善してください。
+
+【重要】
+- 指示された部分のみ修正し、他は維持
+- トーンやフォーマットは元のスライドを踏襲
+- 修正理由を簡潔にnotesに記載
+
+出力はJSON形式のみ：
+{
+  "title": "修正後の見出し",
+  "body": ["修正後の本文1", "修正後の本文2"],
+  "notes": "修正箇所: xxx → yyy",
+  "visualHint": "（変更があれば）"
+}`
+  }
+
+  buildUserMessage(slide: SgFinalSlide, instruction: string, concept: Sg02Output): string {
+    return `## 現在のスライド
+タイトル: ${slide.title}
+本文: ${slide.body.join(' / ')}
+ノート: ${slide.notes}
+
+## キーメッセージ（参考）
+${concept.keyMessage}
+
+## 修正指示
+${instruction}
+
+上記の指示に従ってスライドを修正してください。`
+  }
+}
+```
+
+### UI
+
+**/projects/[id]/slides ページに修正セクション追加:**
+
+```tsx
+const [reviseMode, setReviseMode] = useState(false)
+const [targetPage, setTargetPage] = useState<number | null>(null)
+const [reviseInstruction, setReviseInstruction] = useState('')
+
+{generation?.status === 'COMPLETED' && (
+  <div style={{ marginTop: '24px', padding: '16px', border: '1px solid var(--line2)' }}>
+    <div style={{ fontFamily: 'var(--font-d)', fontSize: '11px', fontWeight: 700, marginBottom: '12px' }}>
+      ページ修正
+    </div>
+    
+    <div style={{ display: 'flex', gap: '12px', marginBottom: '12px' }}>
+      <input
+        type="number"
+        min={1}
+        max={slides.length}
+        placeholder="ページ番号"
+        value={targetPage ?? ''}
+        onChange={e => setTargetPage(Number(e.target.value))}
+        style={{ width: '80px', padding: '8px' }}
+      />
+      <span style={{ alignSelf: 'center', fontSize: '12px', color: 'var(--ink3)' }}>
+        / {slides.length}ページ
+      </span>
+    </div>
+    
+    <textarea
+      placeholder="修正指示（例: 見出しをもっとインパクトのある表現に変更して）"
+      value={reviseInstruction}
+      onChange={e => setReviseInstruction(e.target.value)}
+      style={{ width: '100%', minHeight: '80px', padding: '12px', marginBottom: '12px' }}
+    />
+    
+    <button
+      onClick={handleRevise}
+      disabled={!targetPage || !reviseInstruction}
+      style={{ padding: '10px 20px', background: 'var(--ink)', color: 'var(--bg)' }}
+    >
+      このページを修正 →
+    </button>
+  </div>
+)}
+```
+
+---
+
+## 実装順序（更新）
+
+1. prisma スキーマ修正 + db push
+2. sg-types.ts に orientation 追加
+3. sg-base-agent.ts JSONパース改善
+4. SG-04 分割実行
+5. sg-pipeline.ts 再開機能
+6. pptx-generator.ts にサイズ選択対応
+7. PDF変換（LibreOffice headless）
+8. API修正（sg-pipeline、/api/projects）
+9. TOPページにボタン追加
+10. /projects/[id]/slides ページ作成（サイズ選択UI含む）
+11. SG-REVISE エージェント作成
+12. 修正API（/api/sg-generation/[id]/revise）
+13. 修正UI追加
+14. 既存ポップアップを新ページへのリンクに変更
