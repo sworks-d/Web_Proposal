@@ -5,7 +5,7 @@ export class Ag02BrandAgent extends Ag02BaseAgent {
   id: AgentId = 'AG-02'
   primaryId = 'ag-02-brand' as const
   name = '市場・業界分析（ブランド）'
-  protected modelType = 'quality' as const
+  protected modelType = 'fast' as const
 
   parseOutput(raw: string): AgentOutput {
     try {

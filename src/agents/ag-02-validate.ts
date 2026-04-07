@@ -8,7 +8,7 @@ const TIMEOUT_MS = 90_000 // 90秒で強制終了
 export class Ag02ValidateAgent extends BaseAgent {
   id: AgentId = 'AG-02-VALIDATE'
   name = 'ターゲット設計検証'
-  protected modelType = 'quality' as const
+  protected modelType = 'fast' as const
 
   getPrompt(_ctx: ProjectContext): string {
     return loadPrompt('ag-02-validate')
@@ -27,7 +27,7 @@ export class Ag02ValidateAgent extends BaseAgent {
 
     try {
       const raw = await Promise.race([
-        callClaude(system, user, { modelType: 'quality', maxTokens: 4096, enableWebSearch: true }),
+        callClaude(system, user, { modelType: 'fast', maxTokens: 4096 }),
         timeout,
       ])
       const elapsed = ((Date.now() - t0) / 1000).toFixed(1)

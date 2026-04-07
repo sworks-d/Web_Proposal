@@ -40,15 +40,6 @@ const AG_MAX_TOKENS: Record<string, number> = {
   'AG-07C-4': 4096,
 }
 
-// web_search を有効にするエージェント
-// AG-01-RESEARCH は独自 execute() を持つため除外
-const AG_USES_WEB_SEARCH = new Set([
-  'AG-02-VALIDATE',
-  'AG-03',
-  'AG-03-HEURISTIC',
-  'AG-03-HEURISTIC2',
-  'AG-05',
-])
 
 export abstract class BaseAgent {
   abstract id: AgentId
@@ -64,11 +55,10 @@ export abstract class BaseAgent {
     const system = this.getPrompt(input.projectContext)
     const user = this.buildUserMessage(input)
     const maxTokens = AG_MAX_TOKENS[this.id]
-    const enableWebSearch = AG_USES_WEB_SEARCH.has(this.id)
+    console.log(`[${this.id}] input tokens: ${system.length + user.length}`)
     this.lastRawText = await callClaude(system, user, {
       modelType: this.modelType,
       maxTokens,
-      enableWebSearch,
     })
     return this.parseOutput(this.lastRawText)
   }
@@ -92,10 +82,15 @@ export abstract class BaseAgent {
     }
     if (input.previousOutputs.length > 0) {
       lines.push('\n## 前エージェントの出力サマリー')
+      let remaining = 500
       for (const prev of input.previousOutputs) {
+        if (remaining <= 0) break
         lines.push(`\n### ${prev.agentId}`)
         for (const s of prev.sections.slice(0, 3)) {
-          lines.push(`**${s.title}**\n${s.content.slice(0, 500)}`)
+          if (remaining <= 0) break
+          const chunk = s.content.slice(0, remaining)
+          lines.push(`**${s.title}**\n${chunk}`)
+          remaining -= chunk.length
         }
       }
     }

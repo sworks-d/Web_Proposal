@@ -5,7 +5,7 @@ import { loadPrompt } from '@/lib/prompt-loader'
 export class Ag07StoryAgent extends BaseAgent {
   id: AgentId = 'AG-07'
   name = '提案書草案・コピー'
-  protected modelType = 'quality' as const
+  protected modelType = 'fast' as const
 
   getPrompt(_ctx: ProjectContext): string {
     return loadPrompt('ag-07-story')

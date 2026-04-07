@@ -19,7 +19,7 @@ function detectEvidenceDuplication(slides: Array<Record<string, unknown>>): stri
 export class Ag07c3Agent extends BaseAgent {
   id: AgentId = 'AG-07C-3'
   name = '素材セット Ch.05〜06'
-  protected modelType = 'quality' as const
+  protected modelType = 'fast' as const
 
   getPrompt(_ctx: ProjectContext): string {
     return loadPrompt('ag-07c-3')

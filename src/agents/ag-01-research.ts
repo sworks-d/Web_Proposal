@@ -8,7 +8,7 @@ import { measurePageSpeed } from '@/lib/pagespeed-client'
 export class Ag01ResearchAgent extends BaseAgent {
   id: AgentId = 'AG-01-RESEARCH'
   name = '会社情報リサーチ'
-  protected modelType = 'quality' as const
+  protected modelType = 'fast' as const
 
   getPrompt(_ctx: ProjectContext): string {
     return loadPrompt('ag-01-research')
@@ -44,12 +44,12 @@ export class Ag01ResearchAgent extends BaseAgent {
       const tCall = Date.now()
 
       const res = await anthropic.messages.create({
-        model: 'claude-sonnet-4-6',
-        max_tokens: 8192,
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 4096,
         system,
         messages,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        ...(i === 0 ? { tools: [{ type: 'web_search_20260209' as any, name: 'web_search', max_uses: 20 }] } : {}),
+        ...(i === 0 ? { tools: [{ type: 'web_search_20260209' as any, name: 'web_search', max_uses: 5, allowed_callers: ['direct'] }] } : {}),
       })
 
       const elapsed = ((Date.now() - tCall) / 1000).toFixed(1)
@@ -135,12 +135,12 @@ web_searchはサイトに載っていない「業界情報・競合情報・口�
     const tCall = Date.now()
 
     const res = await anthropic.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 8192,
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 4096,
       system,
       messages,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      tools: [{ type: 'web_search_20260209' as any, name: 'web_search', max_uses: 10 }],
+      tools: [{ type: 'web_search_20260209' as any, name: 'web_search', max_uses: 5, allowed_callers: ['direct'] }],
     })
 
     const elapsed = ((Date.now() - tCall) / 1000).toFixed(1)

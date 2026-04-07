@@ -5,7 +5,7 @@ export class Ag02StpAgent extends Ag02BaseAgent {
   id: AgentId = 'AG-02-STP'
   primaryId = 'ag-02-stp' as const
   name = 'STPセグメンテーション分析'
-  protected modelType = 'quality' as const
+  protected modelType = 'fast' as const
 
   async execute(input: AgentInput): Promise<AgentOutput> {
     const [part1, part2] = await Promise.all([

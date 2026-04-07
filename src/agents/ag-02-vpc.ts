@@ -5,7 +5,7 @@ export class Ag02VpcAgent extends Ag02BaseAgent {
   id: AgentId = 'AG-02-VPC'
   primaryId = 'ag-02-vpc' as const
   name = 'バリュープロポジションキャンバス'
-  protected modelType = 'quality' as const
+  protected modelType = 'fast' as const
 
   async execute(input: AgentInput): Promise<AgentOutput> {
     const [part1, part2] = await Promise.all([

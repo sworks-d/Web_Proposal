@@ -1,14 +1,24 @@
 import { BaseAgent } from './base-agent'
-import { AgentId, AgentOutput, ProjectContext } from './types'
+import { AgentId, AgentInput, AgentOutput, ProjectContext } from './types'
 import { loadPrompt } from '@/lib/prompt-loader'
 
 export class Ag07aAnalysisAgent extends BaseAgent {
   id: AgentId = 'AG-07A'
   name = 'サイト設計根拠ライター（分析統合）'
-  protected modelType = 'quality' as const
+  protected modelType = 'fast' as const
 
   getPrompt(_ctx: ProjectContext): string {
     return loadPrompt('ag-07a-analysis')
+  }
+
+  async execute(input: AgentInput): Promise<AgentOutput> {
+    const [part1, part2] = await Promise.all([
+      this.callSection(input, 'siteMission、siteCoreConcept、primaryCV、analysisMatrix フィールドのみ出力', 8000),
+      this.callSection(input, 'contentArchitecture、designPriorities、risks、confidence、factBasis、assumptions フィールドのみ出力', 8000),
+    ])
+    const merged = { ...part1, ...part2 }
+    this.lastRawText = JSON.stringify(merged)
+    return this.parseOutput(this.lastRawText)
   }
 
   parseOutput(raw: string): AgentOutput {
