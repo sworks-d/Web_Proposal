@@ -91,34 +91,31 @@ export abstract class BaseAgent {
     }
     if (input.previousOutputs.length > 0) {
       lines.push('\n## 前エージェントの出力サマリー')
-      
       // エージェントごとに適切な上限を設定（重要な前段AGは多く渡す）
       const limits: Record<string, number> = {
-        'AG-01': 3000,
-        'AG-01-RESEARCH': 2000,
-        'AG-01-MERGE': 4000,
-        'AG-02': 4000,
-        'AG-02-JOURNEY': 3000,
-        'AG-02-STP': 3000,
-        'AG-02-VPC': 3000,
-        'AG-02-POSITION': 3000,
-        'AG-02-MERGE': 5000,
-        'AG-03': 3000,
-        'AG-03-DATA': 3000,
-        'AG-03-GAP': 3000,
+        'AG-01':           3000,
+        'AG-01-RESEARCH':  2000,
+        'AG-01-MERGE':     4000,
+        'AG-02':           4000,
+        'AG-02-JOURNEY':   3000,
+        'AG-02-STP':       3000,
+        'AG-02-VPC':       3000,
+        'AG-02-POSITION':  3000,
+        'AG-02-MERGE':     5000,
+        'AG-03':           3000,
+        'AG-03-DATA':      3000,
+        'AG-03-GAP':       3000,
         'AG-03-HEURISTIC': 3000,
-        'AG-03-HEURISTIC2': 3000,
-        'AG-03-MERGE': 5000,
-        'AG-04': 4000,
-        'AG-04-INSIGHT': 4000,
-        'AG-04-MERGE': 5000,
-        'AG-05': 3000,
+        'AG-03-HEURISTIC2':3000,
+        'AG-03-MERGE':     5000,
+        'AG-04':           4000,
+        'AG-04-INSIGHT':   4000,
+        'AG-04-MERGE':     5000,
+        'AG-05':           3000,
       }
-      
       for (const prev of input.previousOutputs) {
         const limit = limits[prev.agentId] ?? 2000
         let remaining = limit
-        
         lines.push(`\n### ${prev.agentId}`)
         for (const s of prev.sections) {
           if (remaining <= 0) break
@@ -155,8 +152,18 @@ export abstract class BaseAgent {
     const system = this.getPrompt(input.projectContext)
     const user = this.buildUserMessage(input) +
       `\n\n---\n【出力指示（このリクエスト専用）】\n${sectionInstruction}\n指定フィールドのみのJSONを出力すること。説明・前置き・コードフェンス不要。`
-    const raw = await callClaude(system, user, this.modelType, maxTokens)
-    return (safeParseJson(raw) as Record<string, unknown>) ?? {}
+    try {
+      const raw = await callClaude(system, user, this.modelType, maxTokens)
+      const parsed = safeParseJson(raw)
+      if (parsed === null) {
+        console.error(`[${this.id}] callSection パース失敗:`, raw.slice(0, 500))
+        return { _parseError: true, _rawText: raw }
+      }
+      return parsed as Record<string, unknown>
+    } catch (err) {
+      console.error(`[${this.id}] callSection エラー:`, err)
+      return { _callError: true, _errorMessage: String(err) }
+    }
   }
 
   protected parseJSON<T>(text: string): T {

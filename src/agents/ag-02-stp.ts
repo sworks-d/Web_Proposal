@@ -16,6 +16,14 @@ export class Ag02StpAgent extends Ag02BaseAgent {
         'targeting、positioning、positioningMap、designImplication、confidence、factBasis、assumptions フィールドのみ出力。segmentation は含めない。',
         6000),
     ])
+    if (part1._parseError || part2._parseError) {
+      const rawTexts = [
+        (part1._rawText as string) ?? JSON.stringify(part1),
+        (part2._rawText as string) ?? JSON.stringify(part2),
+      ].join('\n\n---\n\n')
+      this.lastRawText = rawTexts
+      return this.fallbackOutput(rawTexts)
+    }
     const merged = { ...part1, ...part2 }
     this.lastRawText = JSON.stringify(merged)
     return this.parseOutput(this.lastRawText)

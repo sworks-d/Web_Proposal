@@ -2,12 +2,12 @@ import Anthropic from '@anthropic-ai/sdk'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
-export type ModelType = 'fast' | 'quality'
+export type ModelType = 'fast' | 'quality' | 'premium'
 
 export function getModel(type: ModelType = 'fast'): string {
-  return type === 'quality'
-    ? (process.env.DEFAULT_MODEL_QUALITY ?? 'claude-sonnet-4-6')
-    : (process.env.DEFAULT_MODEL_FAST ?? 'claude-haiku-4-5-20251001')
+  if (type === 'premium') return process.env.DEFAULT_MODEL_PREMIUM ?? 'claude-opus-4-6'
+  if (type === 'quality') return process.env.DEFAULT_MODEL_QUALITY ?? 'claude-sonnet-4-6'
+  return process.env.DEFAULT_MODEL_FAST ?? 'claude-haiku-4-5-20251001'
 }
 
 export interface ClaudeCallOptions {
@@ -37,7 +37,7 @@ export async function callClaude(
     enableWebSearch = modelTypeOrOptions.enableWebSearch ?? false
   }
 
-  const defaultMax = modelType === 'quality' ? 8192 : 4096
+  const defaultMax = modelType === 'premium' ? 8192 : modelType === 'quality' ? 8192 : 4096
   const limit = maxTokens ?? defaultMax
 
   type Msg = { role: 'user' | 'assistant'; content: string }

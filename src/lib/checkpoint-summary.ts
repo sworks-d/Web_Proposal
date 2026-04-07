@@ -5,7 +5,14 @@ export interface GotInfoItem {
   confidence: 'high' | 'medium' | 'low'
   title: string
   summary: string
-  source: string
+  source: string     // AgentId
+  sectionId?: string // セクション特定用（差し戻し機能）
+}
+
+export interface RerunRequest {
+  agentId: string
+  sectionId?: string
+  instruction: string
 }
 
 export interface MissingInfoItem {
@@ -49,6 +56,7 @@ export function buildCheckpointSummary(outputs: AgentOutput[]): CheckpointSummar
           title: section.title,
           summary: section.content?.slice(0, 120) ?? '',
           source: output.agentId,
+          sectionId: section.id,
         })
       }
     }

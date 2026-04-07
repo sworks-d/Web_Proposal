@@ -18,7 +18,7 @@ export class Ag03CompetitorAgent extends BaseAgent {
       if (p.competitors) sections.push({ id: 'competitors', title: '競合個別評価', content: JSON.stringify(p.competitors, null, 2), sectionType: 'competitors', isEditable: true, canRegenerate: true })
       if (p.positioningMap) sections.push({ id: 'positioning-map', title: 'ポジショニングマップ', content: JSON.stringify(p.positioningMap, null, 2), sectionType: 'visualization', isEditable: true, canRegenerate: true })
       if (p.differentiationOpportunity) sections.push({ id: 'differentiation', title: '差別化機会・推奨ポジション', content: JSON.stringify(p.differentiationOpportunity, null, 2), sectionType: 'strategy', isEditable: true, canRegenerate: true })
-      if (sections.length === 0) sections.push({ id: 'raw', title: '競合分析結果', content: raw, sectionType: 'text', isEditable: true, canRegenerate: true })
+      if (sections.length === 0) sections.push({ id: 'raw', title: '競合分析結果（構造化失敗）', content: raw.slice(0, 10000), sectionType: 'text', isEditable: true, canRegenerate: true })
       return {
         agentId: this.id,
         sections,

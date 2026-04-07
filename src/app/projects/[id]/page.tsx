@@ -1,12 +1,14 @@
 'use client'
 import { useState, useEffect, use } from 'react'
 import { AgentOutput, PipelineConfig, Section } from '@/agents/types'
-import { buildCheckpointSummary } from '@/lib/checkpoint-summary'
+import { buildCheckpointSummary, GotInfoItem, MissingInfoItem } from '@/lib/checkpoint-summary'
 import Ticker from '@/components/layout/Ticker'
 import NavBar from '@/components/layout/NavBar'
 import TableOfContents from '@/components/proposal/TableOfContents'
 import { FeedbackModal } from '@/components/feedback/FeedbackModal'
 import { OutputPanel, VersionExecution } from '@/components/pipeline/OutputPanel'
+import { ExecutionStats } from '@/components/pipeline/ExecutionStats'
+import { SlideGeneratorPanel } from '@/components/slides/SlideGeneratorPanel'
 
 interface FullVersion {
   id: string
@@ -36,8 +38,8 @@ type AppStatus = 'idle' | 'running' | 'checkpoint' | 'error' | 'completed'
 type CheckpointState = {
   versionId: string
   phase: 1 | 2 | 3 | 4
-  gotInfo: { confidence: 'high' | 'medium' | 'low'; title: string; summary: string; source: string }[]
-  missingInfo: { item: string; reason: string; confirmMethod: string }[]
+  gotInfo: GotInfoItem[]
+  missingInfo: MissingInfoItem[]
 } | null
 
 const AG_LIST = [
@@ -123,6 +125,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
   const [showVersionDropdown, setShowVersionDropdown] = useState(false)
   const [showSlides, setShowSlides] = useState(false)
   const [showFeedback, setShowFeedback] = useState(false)
+  const [showSgPanel, setShowSgPanel] = useState(false)
   const [feedbackDone, setFeedbackDone] = useState(false)
   const [agentStatuses, setAgentStatuses] = useState<Record<string, 'running' | 'completed' | 'failed' | 'skipped'>>({})
   const [restarting, setRestarting] = useState(false)
@@ -384,6 +387,24 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
       ...o,
       sections: o.sections.map(s => s.id === sectionId ? { ...s, content: newContent } : s),
     })))
+  }
+
+  const handleRerunSection = async (agentId: string, sectionId: string | undefined, instruction: string) => {
+    if (!currentVersionId) return
+    addStatus(`${agentId} を再実行中...`)
+    const res = await fetch(`/api/executions/${currentVersionId}/rerun-section`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ agentId, sectionId, instruction }),
+    })
+    if (!res.ok) {
+      addStatus(`再実行エラー: ${await res.text()}`)
+      return
+    }
+    const { result } = await res.json()
+    addStatus(`${agentId} 再実行完了`)
+    setAllOutputs(prev => prev.map(o => o.agentId === agentId ? result : o))
+    refreshVersion()
   }
 
   if (!project) {
@@ -681,6 +702,12 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
             {currentVersionId && appStatus === 'completed' && (
               <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
                 <button
+                  onClick={() => setShowSgPanel(true)}
+                  style={{ background: 'var(--red)', color: '#fff', fontFamily: 'var(--font-d)', fontSize: '8px', fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', padding: '8px 16px', border: 'none', cursor: 'pointer', borderRadius: '2px' }}
+                >
+                  提案書を作成する →
+                </button>
+                <button
                   onClick={() => setShowSlides(true)}
                   style={{ background: 'var(--ink)', color: 'var(--bg)', fontFamily: 'var(--font-d)', fontSize: '8px', fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', padding: '8px 14px', border: 'none', cursor: 'pointer', borderRadius: '2px' }}
                 >
@@ -688,7 +715,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
                 </button>
                 <button
                   onClick={() => currentVersionId && window.open(`/api/versions/${currentVersionId}/pdf`, '_blank')}
-                  style={{ background: 'var(--red)', color: '#fff', fontFamily: 'var(--font-d)', fontSize: '8px', fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', padding: '8px 14px', border: 'none', cursor: 'pointer', borderRadius: '2px' }}
+                  style={{ background: 'transparent', color: 'var(--ink2)', fontFamily: 'var(--font-d)', fontSize: '8px', fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', padding: '8px 14px', border: '1px solid var(--line2)', cursor: 'pointer', borderRadius: '2px' }}
                 >
                   ↓ PDF
                 </button>
@@ -798,8 +825,13 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
               cdNotes={cdNotes}
               onCdNoteChange={(key, val) => setCdNotes(prev => ({ ...prev, [key]: val }))}
               onCheckpointConfirm={handleCheckpointConfirm}
+              onRerunSection={handleRerunSection}
             />
           </div>
+          {/* 実行時間統計（完了時） */}
+          {appStatus === 'completed' && currentVersionId && (
+            <ExecutionStats versionId={currentVersionId} />
+          )}
         </div>
       </div>
 
@@ -839,6 +871,14 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
           chapters={[]}
           onComplete={() => { setShowFeedback(false); setFeedbackDone(true); startDownload() }}
           onSkip={() => { setShowFeedback(false); setFeedbackDone(true); startDownload() }}
+        />
+      )}
+
+      {/* Slide Generator Panel */}
+      {showSgPanel && currentVersionId && (
+        <SlideGeneratorPanel
+          versionId={currentVersionId}
+          onClose={() => setShowSgPanel(false)}
         />
       )}
     </div>

@@ -183,6 +183,8 @@ export async function runAgentStep(
   let parseErrorMessage: string | undefined
   let rawText = ''
   let cleanedText = ''
+  let durationMs: number | undefined
+  const startTime = Date.now()
 
   try {
     const timeoutMs = AGENT_TIMEOUTS[agentId] ?? 180_000
@@ -192,7 +194,8 @@ export async function runAgentStep(
     console.log(`[pipeline] ${agentId} 開始 (timeout=${timeoutMs / 1000}s)`)
     const t0 = Date.now()
     output = await Promise.race([agent.execute(input), timeoutPromise])
-    console.log(`[pipeline] ${agentId} 完了 (${((Date.now() - t0) / 1000).toFixed(1)}s)`)
+    durationMs = Date.now() - t0
+    console.log(`[pipeline] ${agentId} 完了 (${(durationMs / 1000).toFixed(1)}s)`)
     rawText = agent.lastRawText
     // コードフェンス・前後の余分なテキストを除去してJSONだけ保存する
     const fenceMatch = rawText.match(/```(?:json)?\s*([\s\S]*?)```/)
@@ -221,6 +224,7 @@ export async function runAgentStep(
         parseErrorMessage: message,
         errorMessage: message,
         completedAt: new Date(),
+        durationMs: Date.now() - startTime,
       },
     })
     await prisma.execution.update({
@@ -262,6 +266,7 @@ export async function runAgentStep(
         ? `${parseErrorMessage ?? ''}\n${dedupWarning}`.trim()
         : parseErrorMessage,
       completedAt: new Date(),
+      durationMs,
     },
   })
   await prisma.execution.update({

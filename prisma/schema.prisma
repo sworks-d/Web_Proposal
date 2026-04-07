@@ -58,6 +58,7 @@ model ProposalVersion {
   executions     Execution[]
   slides         ProposalSlide[]
   feedbacks      ProposalFeedback[]
+  sgGenerations  SgGeneration[]
 }
 
 // ── 各AG実行 ──
@@ -89,6 +90,7 @@ model AgentResult {
   errorMessage      String?                            // 失敗時エラー内容
   startedAt         DateTime?                          // エージェント開始時刻
   completedAt       DateTime?                          // 完了/失敗時刻
+  durationMs        Int?                               // 実行時間（ms）
   createdAt         DateTime  @default(now())
 }
 
@@ -107,6 +109,19 @@ model ProposalSlide {
   layoutHint  String?
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @updatedAt
+}
+
+// ── 提案書生成（SG pipeline）──
+model SgGeneration {
+  id          String          @id @default(cuid())
+  versionId   String
+  version     ProposalVersion @relation(fields: [versionId], references: [id])
+  status      String          @default("RUNNING")  // RUNNING | COMPLETED | ERROR
+  params      String          @default("{}")        // JSON: SgParams
+  outputJson  String          @default("")          // JSON: SgFinalOutput
+  errorMessage String?
+  startedAt   DateTime        @default(now())
+  completedAt DateTime?
 }
 
 // ── フィードバック ──

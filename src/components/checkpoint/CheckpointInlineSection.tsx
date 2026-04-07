@@ -7,17 +7,16 @@ interface CheckpointInlineSectionProps {
   versionId: string
   gotInfo: GotInfoItem[]
   missingInfo: MissingInfoItem[]
-  // Phase 1 AG selection
   primaryOptions: { value: string; label: string; desc: string }[]
   subOptions: { value: string; label: string }[]
   selectedPrimary: string
   selectedSub: string[]
   onPrimaryChange: (v: string) => void
   onSubChange: (v: string[]) => void
-  // CD notes for missing info
   cdNotes: Record<string, string>
   onCdNoteChange: (key: string, val: string) => void
   onConfirm: () => void
+  onRerunSection?: (agentId: string, sectionId: string | undefined, instruction: string) => Promise<void>
 }
 
 const PHASE_LABELS: Record<number, string> = {
@@ -26,9 +25,7 @@ const PHASE_LABELS: Record<number, string> = {
   3: '課題/ファクト 確認',
   4: '設計/草案 完了',
 }
-
 const PHASE_NUMS: Record<number, string> = { 1: '①', 2: '②', 3: '③', 4: '④' }
-
 const CONFIDENCE_COLOR: Record<string, string> = {
   high: 'var(--dot-g)', medium: '#E8C44A', low: 'var(--ink4)',
 }
@@ -38,13 +35,29 @@ export function CheckpointInlineSection({
   primaryOptions, subOptions,
   selectedPrimary, selectedSub,
   onPrimaryChange, onSubChange,
-  cdNotes, onCdNoteChange, onConfirm
+  cdNotes, onCdNoteChange, onConfirm,
+  onRerunSection,
 }: CheckpointInlineSectionProps) {
   const [isCollapsed, setIsCollapsed] = useState(false)
+  const [rerunTarget, setRerunTarget] = useState<{ agentId: string; sectionId?: string; title: string } | null>(null)
+  const [rerunInstruction, setRerunInstruction] = useState('')
+  const [isRerunning, setIsRerunning] = useState(false)
+
+  const handleRerun = async () => {
+    if (!rerunTarget || !rerunInstruction.trim() || !onRerunSection) return
+    setIsRerunning(true)
+    try {
+      await onRerunSection(rerunTarget.agentId, rerunTarget.sectionId, rerunInstruction)
+      setRerunTarget(null)
+      setRerunInstruction('')
+    } finally {
+      setIsRerunning(false)
+    }
+  }
 
   return (
     <div style={{ borderBottom: '3px solid #E8C44A', background: 'rgba(232,196,74,0.04)' }}>
-      {/* Banner header */}
+      {/* Banner */}
       <div
         onClick={() => setIsCollapsed(p => !p)}
         style={{ padding: '14px 40px', background: '#E8C44A', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}
@@ -67,6 +80,7 @@ export function CheckpointInlineSection({
 
       {!isCollapsed && (
         <div style={{ padding: '24px 40px 28px' }}>
+
           {/* Phase 1: AG selector */}
           {phase === 1 && (
             <>
@@ -118,16 +132,85 @@ export function CheckpointInlineSection({
                     <span style={{ color: 'var(--dot-g)' }}>✅</span> 取れた情報
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    {gotInfo.slice(0, 6).map((item, i) => (
-                      <div key={i} style={{ display: 'flex', gap: '12px', padding: '11px 14px', background: 'var(--bg2)', borderLeft: `3px solid ${CONFIDENCE_COLOR[item.confidence] ?? 'var(--line2)'}` }}>
-                        <span style={{ fontFamily: 'var(--font-d)', fontSize: '8px', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: CONFIDENCE_COLOR[item.confidence], flexShrink: 0, marginTop: '2px' }}>{item.confidence}</span>
-                        <div>
-                          <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--ink)', marginBottom: '3px' }}>{item.title}</div>
-                          {item.summary && <div style={{ fontFamily: 'var(--font-c)', fontSize: '11px', color: 'var(--ink3)', lineHeight: 1.6 }}>{item.summary}</div>}
-                          <div style={{ fontFamily: 'var(--font-d)', fontSize: '8px', color: 'var(--ink4)', marginTop: '4px', letterSpacing: '0.06em' }}>{item.source}</div>
+                    {gotInfo.slice(0, 6).map((item, i) => {
+                      const isTargeted = rerunTarget?.agentId === item.source && rerunTarget?.sectionId === item.sectionId
+                      return (
+                        <div key={i} style={{ background: 'var(--bg2)', borderLeft: `3px solid ${CONFIDENCE_COLOR[item.confidence] ?? 'var(--line2)'}` }}>
+                          <div style={{ display: 'flex', gap: '12px', padding: '11px 14px', alignItems: 'flex-start' }}>
+                            <span style={{ fontFamily: 'var(--font-d)', fontSize: '8px', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: CONFIDENCE_COLOR[item.confidence], flexShrink: 0, marginTop: '2px' }}>{item.confidence}</span>
+                            <div style={{ flex: 1 }}>
+                              <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--ink)', marginBottom: '3px' }}>{item.title}</div>
+                              {item.summary && <div style={{ fontFamily: 'var(--font-c)', fontSize: '11px', color: 'var(--ink3)', lineHeight: 1.6 }}>{item.summary}</div>}
+                              <div style={{ fontFamily: 'var(--font-d)', fontSize: '8px', color: 'var(--ink4)', marginTop: '4px', letterSpacing: '0.06em' }}>{item.source}</div>
+                            </div>
+                            {onRerunSection && (
+                              <button
+                                onClick={() => {
+                                  if (isTargeted) {
+                                    setRerunTarget(null)
+                                    setRerunInstruction('')
+                                  } else {
+                                    setRerunTarget({ agentId: item.source, sectionId: item.sectionId, title: item.title })
+                                    setRerunInstruction('')
+                                  }
+                                }}
+                                style={{
+                                  flexShrink: 0, padding: '4px 9px', whiteSpace: 'nowrap',
+                                  fontFamily: 'var(--font-d)', fontSize: '8px', fontWeight: 700,
+                                  letterSpacing: '0.1em', textTransform: 'uppercase',
+                                  background: isTargeted ? 'var(--ink)' : 'transparent',
+                                  color: isTargeted ? 'var(--bg)' : 'var(--ink3)',
+                                  border: '1px solid var(--line2)', borderRadius: '2px', cursor: 'pointer',
+                                }}
+                              >
+                                修正指示 ✏️
+                              </button>
+                            )}
+                          </div>
+
+                          {/* 修正指示入力エリア */}
+                          {isTargeted && (
+                            <div style={{ padding: '0 14px 12px', borderTop: '1px solid var(--line)' }}>
+                              <div style={{ paddingTop: '10px', marginBottom: '6px', fontFamily: 'var(--font-d)', fontSize: '8px', fontWeight: 700, letterSpacing: '0.1em', color: 'var(--ink3)' }}>
+                                {item.source}「{item.title}」への修正指示
+                              </div>
+                              <textarea
+                                value={rerunInstruction}
+                                onChange={e => setRerunInstruction(e.target.value)}
+                                placeholder="例：競合C社の分析が不足しています。UI/UX観点でも追加してください。"
+                                rows={3}
+                                style={{
+                                  width: '100%', boxSizing: 'border-box',
+                                  background: 'var(--bg)', border: '1px solid var(--line2)',
+                                  padding: '8px 10px', fontSize: '12px', fontFamily: 'var(--font-c)',
+                                  color: 'var(--ink)', lineHeight: 1.6, resize: 'vertical', borderRadius: '2px',
+                                }}
+                              />
+                              <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+                                <button
+                                  onClick={() => { setRerunTarget(null); setRerunInstruction('') }}
+                                  style={{ padding: '7px 14px', background: 'transparent', border: '1px solid var(--line2)', color: 'var(--ink3)', fontFamily: 'var(--font-d)', fontSize: '8px', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', borderRadius: '2px', cursor: 'pointer' }}
+                                >
+                                  キャンセル
+                                </button>
+                                <button
+                                  onClick={handleRerun}
+                                  disabled={!rerunInstruction.trim() || isRerunning}
+                                  style={{
+                                    padding: '7px 14px', background: rerunInstruction.trim() && !isRerunning ? 'var(--red)' : 'var(--line2)',
+                                    color: '#fff', border: 'none', fontFamily: 'var(--font-d)', fontSize: '8px',
+                                    fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase',
+                                    borderRadius: '2px', cursor: rerunInstruction.trim() && !isRerunning ? 'pointer' : 'not-allowed',
+                                  }}
+                                >
+                                  {isRerunning ? '実行中...' : '再実行 →'}
+                                </button>
+                              </div>
+                            </div>
+                          )}
                         </div>
-                      </div>
-                    ))}
+                      )
+                    })}
                   </div>
                 </div>
               )}

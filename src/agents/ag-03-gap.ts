@@ -20,6 +20,14 @@ export class Ag03GapAgent extends BaseAgent {
         'vacantAreas、topGapOpportunities、confidence、factBasis、assumptions フィールドのみ出力。contentInventory は含めない。',
         5000),
     ])
+    if (part1._parseError || part2._parseError) {
+      const rawTexts = [
+        (part1._rawText as string) ?? JSON.stringify(part1),
+        (part2._rawText as string) ?? JSON.stringify(part2),
+      ].join('\n\n---\n\n')
+      this.lastRawText = rawTexts
+      return { agentId: this.id, sections: [{ id: 'raw', title: 'ギャップ分析（生成失敗）', content: rawTexts.slice(0, 10000), sectionType: 'text', isEditable: true, canRegenerate: true }], visualizations: [], metadata: { confidence: 'low', factBasis: [], assumptions: [], missingInfo: [] } }
+    }
     const merged = { ...part1, ...part2 }
     this.lastRawText = JSON.stringify(merged)
     return this.parseOutput(this.lastRawText)

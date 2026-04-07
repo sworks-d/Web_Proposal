@@ -75,6 +75,10 @@ export async function POST(
   const prevOutputMap = await getVersionOutputs(versionId)
   const completedAgIds = Object.keys(prevOutputMap)
 
+  // JSONパース成否に関係なく、DBのCOMPLETED実行ステータスで完了判定する
+  // （parseエラーのAGがcompletedAgIdsに入らずphaseが誤判定されるのを防ぐ）
+  const completedExecAgIds = new Set(version.executions.map(e => e.agentId))
+
   // AG-01の生出力からinputPatternを取得（AG-03-DATA実行判定に使用）
   const ag01Raw = version.executions
     .find(e => e.agentId === 'AG-01')?.results[0]?.outputJson ?? ''
@@ -86,11 +90,11 @@ export async function POST(
     .filter(id => prevOutputMap[id])
     .map(id => prevOutputMap[id])
 
-  // phase判定（0=AG-01系, 1=AG-02/03系, 2=AG-04系, 3=AG-06/07系, 4=完了）
-  const phase = completedAgIds.includes('AG-07C-4') ? 4
-    : completedAgIds.includes('AG-05') ? 3
-    : completedAgIds.includes('AG-03-MERGE') ? 2
-    : completedAgIds.includes('AG-01-MERGE') ? 1
+  // phase判定: DBの実行ステータスで判定（JSONパース可否に依存しない）
+  const phase = completedExecAgIds.has('AG-07C-4') ? 4
+    : completedExecAgIds.has('AG-05') ? 3
+    : completedExecAgIds.has('AG-03-MERGE') ? 2
+    : completedExecAgIds.has('AG-01-MERGE') ? 1
     : 0
 
   await setVersionStatus(versionId, 'RUNNING')
@@ -111,9 +115,13 @@ export async function POST(
         if (isStopRequested(versionId)) {
           throw new Error('STOP_REQUESTED')
         }
-        if (completedAgIds.includes(agentId)) {
+        // DBステータスで完了判定（JSONパース失敗のAGも再実行しない）
+        if (completedAgIds.includes(agentId) || completedExecAgIds.has(agentId)) {
           send({ type: 'agent_complete', agentId, status: 'skipped' })
-          return prevOutputMap[agentId]
+          return prevOutputMap[agentId] ?? {
+            agentId, sections: [], visualizations: [],
+            metadata: { confidence: 'low', factBasis: [], assumptions: [], missingInfo: [] },
+          }
         }
         send({ type: 'agent_start', agentId, label })
         send({ type: 'status', message: `${label} 実行中...` })

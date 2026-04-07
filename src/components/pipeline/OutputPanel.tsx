@@ -94,13 +94,14 @@ interface OutputPanelProps {
   cdNotes: Record<string, string>
   onCdNoteChange: (key: string, val: string) => void
   onCheckpointConfirm: () => void
+  onRerunSection?: (agentId: string, sectionId: string | undefined, instruction: string) => Promise<void>
 }
 
 export function OutputPanel({
   versionExecutions, currentAG, appStatus, statusMessages, selectedAgentId, onAgSelect,
   checkpointState, primaryOptions, subOptions,
   selectedPrimary, selectedSub, onPrimaryChange, onSubChange,
-  cdNotes, onCdNoteChange, onCheckpointConfirm,
+  cdNotes, onCdNoteChange, onCheckpointConfirm, onRerunSection,
 }: OutputPanelProps) {
   const msgRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
@@ -135,6 +136,7 @@ export function OutputPanel({
           cdNotes={cdNotes}
           onCdNoteChange={onCdNoteChange}
           onConfirm={onCheckpointConfirm}
+          onRerunSection={onRerunSection}
         />
       )}
 
