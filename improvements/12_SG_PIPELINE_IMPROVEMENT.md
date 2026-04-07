@@ -1072,18 +1072,39 @@ model SgGeneration {
 
 ## 実装順序
 
+### Phase 1（最小実装）
+
 1. prisma スキーマ修正 + db push
-2. 型定義（SlideRole, LayoutType, Theme）
-3. SG-01: 型選択・章構成
-4. SG-02: ナラティブ設計（Opus）
-5. SG-03: 心理設計（Opus）
-6. SG-04: 本文生成（分割実行）
-7. SG-05: レイアウト設計
-8. SG-06: ビジュアル生成
-9. HTMLスライドレンダラー（10種テンプレート）
-10. Puppeteer PDF化
-11. **提案書一覧ページ `/projects/[id]/proposals`**
-12. 再開機能
+2. 型定義
+3. **SG-01**: 章構成・型選択（Sonnet）
+4. **SG-02**: インサイト・コピー・緩急設計（Opus）← SG-03を統合
+5. **SG-04**: 本文生成 + レイアウト決定（Sonnet）← SG-05を統合
+6. **SG-06**: ビジュアル生成（chart.js/table/SVG）
+7. HTMLスライドレンダラー
+8. Puppeteer PDF化
+9. 提案書一覧ページ `/projects/[id]/proposals`
+10. API routes
+
+### Phase 2（将来）
+
+- 再開機能
+- HTMLプレビュー
+- スライド単位の再生成
+
+---
+
+## エージェント構成（確定）
+
+| SG | モデル | 役割 |
+|---|---|---|
+| SG-01 | Sonnet | 章構成・型選択・ページ配分 |
+| SG-02 | **Opus** | インサイト・コピー・緩急設計（旧SG-03統合） |
+| SG-04 | Sonnet | 本文生成・スライドタイプ決定（旧SG-05統合） |
+| SG-06 | Sonnet | ビジュアル生成（chart.js/table/SVG） |
+
+**削除したSG:**
+- SG-03（心理設計）→ SG-02に統合
+- SG-05（レイアウト設計）→ SG-04に統合
 
 ---
 

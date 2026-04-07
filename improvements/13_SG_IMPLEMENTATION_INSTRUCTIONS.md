@@ -881,18 +881,34 @@ src/app/api/sg/
 
 ---
 
-## 実装順序
+## 実装順序（Phase 1）
 
 1. `npx prisma db push`（スキーマ）
 2. `src/lib/sg/types.ts`
-3. `prompts/sg-01-structure/default.md`
-4. `prompts/sg-02-narrative/default.md`（設計ドキュメントから）
-5. `prompts/sg-04-content/default.md`
-6. `src/lib/sg/sg-pipeline.ts`
-7. `src/lib/sg/slide-renderer.tsx`（3テンプレート）
-8. `src/lib/sg/pdf-generator.ts`
-9. API routes
-10. UI更新
+3. `prompts/sg-01-structure/default.md` ← 作成済み
+4. `prompts/sg-02-narrative/default.md` ← 作成済み
+5. `prompts/sg-04-content/default.md` ← **要作成**
+6. `prompts/sg-06-visual/default.md` ← **要作成**
+7. `src/lib/sg/sg-pipeline.ts`
+8. `src/lib/sg/slide-renderer.tsx`
+9. `src/lib/sg/pdf-generator.ts`
+10. API routes
+11. UI更新
+
+---
+
+## エージェント構成（確定）
+
+| SG | モデル | 役割 |
+|---|---|---|
+| SG-01 | Sonnet | 章構成・型選択・ページ配分 |
+| SG-02 | **Opus** | インサイト・コピー・緩急設計（旧SG-03統合） |
+| SG-04 | Sonnet | 本文生成・スライドタイプ決定（旧SG-05統合） |
+| SG-06 | Sonnet | ビジュアル生成（chart.js/table/SVG） |
+
+**削除したSG:**
+- SG-03（心理設計）→ SG-02に統合
+- SG-05（レイアウト設計）→ SG-04に統合
 
 ---
 
