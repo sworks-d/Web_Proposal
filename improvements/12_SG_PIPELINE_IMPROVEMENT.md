@@ -1,156 +1,419 @@
-# 12: 提案書生成システム改善
+# 12: 提案書生成システム（全面再設計）
 
-## 問題
+## 目標
 
-1. **SG-04でJSON出力が途中で切れる** — max_tokens 8192では25枚以上のスライドで不足
-2. **ポップアップ依存** — ウィンドウを閉じると処理が止まる
-3. **再開機能なし** — エラー時に最初からやり直し
-4. **TOPページに完了状態のボタンがない** — AG/SG完了後の確認・DL導線がない
-5. **SG再開が最初から始まる** — SG-04で失敗してもSG-01から再開される
+**Gensparkを超える提案書を自動生成する。**
+
+Gensparkは「Web Proposal Agentのダッシュボード画面」を渡しただけで、そのトーンを理解して提案書を作った。
+同様に、Simple/Rich/Popのリファレンス（Webサイト）を渡すだけで、そのトーンを「提案書」に翻訳できるようにする。
 
 ---
 
-## 改善内容
+## 現状の問題
 
-### A. TOPページのカードにボタン追加
+1. **図解が生成されていない** — `[ビジュアル] chart: ...` がテキストのまま出力
+2. **レイアウトがない** — 全ページが箇条書きの羅列
+3. **デザインが存在しない** — 余白・強弱・タイポグラフィ・色が設計されていない
+4. **「提案書の設計メモ」が出力されている** — 完成品ではなく指示書が出ている
 
-完了状態の案件カードに「分析確認」「提案書DL」ボタンを追加。
+---
 
-**src/app/page.tsx 修正:**
+## アーキテクチャ（再設計）
 
-```tsx
-// Project型にSG完了状態を追加
-interface Project {
-  // ...既存
-  sgGeneration?: {
-    id: string
-    status: string
-  } | null
-}
-
-// カード内にボタン追加（cardStatus === 'done' の場合）
-{cardStatus === 'done' && (
-  <div style={{ 
-    display: 'flex', 
-    gap: '8px', 
-    marginTop: '12px',
-    borderTop: '1px solid var(--line2)',
-    paddingTop: '12px',
-  }}>
-    <button
-      onClick={(e) => {
-        e.stopPropagation()
-        router.push(`/projects/${p.id}`)
-      }}
-      style={{
-        flex: 1,
-        padding: '8px 12px',
-        fontSize: '10px',
-        fontFamily: 'var(--font-d)',
-        fontWeight: 700,
-        letterSpacing: '0.1em',
-        background: 'var(--bg2)',
-        border: '1px solid var(--line2)',
-        cursor: 'pointer',
-      }}
-    >
-      分析確認
-    </button>
-    
-    {p.sgGeneration?.status === 'COMPLETED' ? (
-      <button
-        onClick={(e) => {
-          e.stopPropagation()
-          window.location.href = `/api/versions/${latestVersion.id}/sg-download`
-        }}
-        style={{
-          flex: 1,
-          padding: '8px 12px',
-          fontSize: '10px',
-          fontFamily: 'var(--font-d)',
-          fontWeight: 700,
-          letterSpacing: '0.1em',
-          background: 'var(--ink)',
-          color: 'var(--bg)',
-          border: 'none',
-          cursor: 'pointer',
-        }}
-      >
-        提案書DL
-      </button>
-    ) : (
-      <button
-        onClick={(e) => {
-          e.stopPropagation()
-          router.push(`/projects/${p.id}/slides`)
-        }}
-        style={{
-          flex: 1,
-          padding: '8px 12px',
-          fontSize: '10px',
-          fontFamily: 'var(--font-d)',
-          fontWeight: 700,
-          letterSpacing: '0.1em',
-          background: 'transparent',
-          border: '1px solid var(--line2)',
-          cursor: 'pointer',
-        }}
-      >
-        提案書作成
-      </button>
-    )}
-  </div>
-)}
+```
+AG-01〜07: 分析（既存）
+    ↓
+SG-01: 構成設計（スライドタイプを決定）
+    ↓
+SG-02: コピー生成（Opus）
+    ↓
+SG-03: ストーリー設計（Opus）
+    ↓
+SG-04: 本文生成（チャプター分割）
+    ↓
+SG-05: レイアウト＋図解データ生成
+    ↓
+【新規】SG-06-VIZ: SVG/図解を実生成
+    - ワイヤーフレーム → SVG
+    - フロー図 → SVG
+    - 比較表 → HTML
+    - 棒グラフ → SVG
+    ↓
+【新規】HTMLスライドレンダラー（React/Tailwind）
+    ↓
+Puppeteer → PDF
 ```
 
-**API修正（/api/projects）:**
+---
 
-SgGenerationの最新状態も返すようにする。
+## トーン別デザインシステム
+
+### リファレンス
+
+| トーン | 参考 | 特徴 |
+|---|---|---|
+| **Simple** | Apple | 白ベース、余白大、1スライド1メッセージ、サンセリフ |
+| **Rich** | FAS | ダーク基調、情報量多め、セリフ系混在、高級感 |
+| **Pop** | 東組採用 | 明るい多色、イラスト多用、丸ゴシック、遊び心 |
+
+### Simple（Apple的）
 
 ```typescript
-const projects = await prisma.project.findMany({
-  include: {
-    client: true,
-    versions: {
-      orderBy: { versionNumber: 'desc' },
-      take: 1,
-      include: {
-        executions: { select: { agentId: true, status: true, isInherited: true } },
-        sgGenerations: { orderBy: { startedAt: 'desc' }, take: 1 },
-      },
-    },
-  },
-  orderBy: { createdAt: 'desc' },
-})
-
-// レスポンス整形でsgGenerationを含める
-return projects.map(p => ({
-  ...p,
-  versions: p.versions.map(v => ({
-    ...v,
-    sgGeneration: v.sgGenerations[0] ?? null,
-  })),
-}))
+const SIMPLE_THEME = {
+  // カラー
+  bg: '#FFFFFF',
+  bgAlt: '#F5F5F7',
+  text: '#1D1D1F',
+  textSub: '#6E6E73',
+  accent: '#0071E3',
+  line: '#E5E5E5',
+  
+  // タイポグラフィ
+  fontTitle: '"SF Pro Display", "Helvetica Neue", sans-serif',
+  fontBody: '"SF Pro Text", "Helvetica Neue", sans-serif',
+  
+  // サイズ（A4ヨコ想定）
+  titleSize: '48px',
+  headingSize: '32px',
+  bodySize: '16px',
+  captionSize: '12px',
+  
+  // ウェイト
+  titleWeight: 700,
+  bodyWeight: 400,
+  
+  // 余白
+  pagePadding: '80px',
+  sectionGap: '48px',
+  
+  // レイアウト原則
+  // - 1スライド1メッセージ
+  // - 余白を惜しまない
+  // - 数字は大きく単独で見せる
+  // - 図解はシンプルな線と円
+}
 ```
 
-### B. SG再開機能の修正（失敗箇所から再開）
+### Rich（FAS的）
 
-**問題**: 現在の実装は毎回新規のSgGenerationを作成し、SG-01から実行している。
+```typescript
+const RICH_THEME = {
+  // カラー
+  bg: '#1A1A1A',
+  bgAlt: '#242424',
+  text: '#F5F5F5',
+  textSub: '#999999',
+  accent: '#C9A86C',       // ゴールド
+  accentSub: '#8B7355',
+  line: '#333333',
+  
+  // タイポグラフィ
+  fontTitle: '"Georgia", "Times New Roman", serif',
+  fontBody: '"Noto Sans JP", sans-serif',
+  
+  // サイズ
+  titleSize: '40px',
+  headingSize: '28px',
+  bodySize: '14px',
+  captionSize: '11px',
+  
+  // ウェイト
+  titleWeight: 400,  // セリフは細め
+  bodyWeight: 300,
+  
+  // 余白
+  pagePadding: '60px',
+  sectionGap: '40px',
+  
+  // レイアウト原則
+  // - 情報量多め、密度高い
+  // - グリッド構成
+  // - 細い罫線で区切る
+  // - 図解は精緻に
+}
+```
 
-**修正**: 既存のERROR状態のSgGenerationを検索し、保存済みの出力を復元して失敗箇所から再開。
+### Pop（東組採用的）
 
-**prisma/schema.prisma 修正:**
+```typescript
+const POP_THEME = {
+  // カラー
+  bg: '#FFFFFF',
+  bgAlt: '#FFF8F0',
+  text: '#333333',
+  textSub: '#666666',
+  accent: '#FF6B35',       // オレンジ
+  accentSub: '#FFB800',    // イエロー
+  accentAlt: '#00B4D8',    // ブルー
+  line: '#E0E0E0',
+  
+  // タイポグラフィ
+  fontTitle: '"Rounded Mplus 1c", "Arial Rounded MT Bold", sans-serif',
+  fontBody: '"Noto Sans JP", sans-serif',
+  
+  // サイズ
+  titleSize: '44px',
+  headingSize: '30px',
+  bodySize: '15px',
+  captionSize: '12px',
+  
+  // ウェイト
+  titleWeight: 800,
+  bodyWeight: 500,
+  
+  // 余白
+  pagePadding: '48px',
+  sectionGap: '32px',
+  
+  // レイアウト原則
+  // - 角丸多用
+  // - アイコン・イラスト多め
+  // - 多色（3〜4色）
+  // - 動きのあるレイアウト
+}
+```
+
+---
+
+## スライドタイプ（10種）
+
+| タイプ | 用途 | レイアウト |
+|---|---|---|
+| `cover` | 表紙 | センター配置、キーメッセージ大 |
+| `chapter-title` | 章タイトル | 大きな見出し + サブコピー |
+| `text-visual-split` | 説明ページ | 左テキスト / 右図解（または逆） |
+| `wireframe` | UI設計 | 左ワイヤー / 右説明3ブロック |
+| `flow-diagram` | 導線設計 | フロー図 + 説明 |
+| `comparison-table` | 比較 | 表形式 |
+| `metrics` | KPI・数値 | 大きな数字 + 説明 |
+| `matrix` | マトリクス | 2x2または軸図 |
+| `roadmap` | 優先順位 | フェーズ分け |
+| `quote` | 強調 | 大きなテキスト |
+
+---
+
+## SG-06-VIZ: 図解生成エージェント
+
+### 概要
+
+SG-05が出力した「図解指示」を、実際のSVG/HTMLに変換する。
+
+### 入力
+
+```json
+{
+  "type": "wireframe",
+  "title": "グループTOP",
+  "components": [
+    { "type": "header", "content": "ロゴ / ナビ / CTA" },
+    { "type": "hero", "content": "FV: コピー & サブコピー" },
+    { "type": "cta-row", "buttons": ["職種から探す", "面談予約"] },
+    { "type": "grid-3col", "items": ["DX・IT系", "インフラ系", "営業系"] }
+  ]
+}
+```
+
+### 出力（SVG）
+
+```svg
+<svg viewBox="0 0 400 600" xmlns="http://www.w3.org/2000/svg">
+  <!-- Header -->
+  <rect x="0" y="0" width="400" height="40" fill="#f5f5f5" stroke="#e0e0e0"/>
+  <text x="16" y="25" font-size="11" fill="#666">ロゴ / ナビ / CTA</text>
+  
+  <!-- Hero -->
+  <rect x="12" y="52" width="376" height="100" fill="#e8e8e8" rx="4"/>
+  <text x="24" y="95" font-size="14" fill="#333">FV: コピー & サブコピー</text>
+  
+  <!-- CTA Row -->
+  <rect x="24" y="120" width="80" height="28" rx="4" fill="#333"/>
+  <text x="36" y="138" font-size="10" fill="#fff">職種から探す</text>
+  <rect x="112" y="120" width="70" height="28" rx="4" fill="none" stroke="#333"/>
+  <text x="124" y="138" font-size="10" fill="#333">面談予約</text>
+  
+  <!-- 3 Column Grid -->
+  <rect x="12" y="170" width="120" height="60" fill="#f0f0f0" rx="4"/>
+  <rect x="140" y="170" width="120" height="60" fill="#f0f0f0" rx="4"/>
+  <rect x="268" y="170" width="120" height="60" fill="#f0f0f0" rx="4"/>
+  <text x="45" y="205" font-size="11" fill="#333">DX・IT系</text>
+  <text x="170" y="205" font-size="11" fill="#333">インフラ系</text>
+  <text x="300" y="205" font-size="11" fill="#333">営業系</text>
+</svg>
+```
+
+### 図解タイプと生成ロジック
+
+| タイプ | 生成方法 |
+|---|---|
+| `wireframe` | コンポーネント定義 → SVGレイアウト |
+| `flow-diagram` | ノード＋エッジ → 矢印付きSVG |
+| `comparison-table` | 行列データ → HTML table |
+| `bar-chart` | データ配列 → SVG棒グラフ |
+| `pie-chart` | データ配列 → SVG円グラフ |
+| `matrix-2x2` | 4象限データ → SVGマトリクス |
+| `timeline` | フェーズ配列 → SVGタイムライン |
+
+---
+
+## HTMLスライドレンダラー
+
+### 概要
+
+SG-04〜06の出力を受け取り、HTMLスライドを生成する。
+
+### スライドテンプレート（React/Tailwind）
+
+```tsx
+// src/components/slides/templates/TextVisualSplit.tsx
+interface Props {
+  theme: Theme
+  title: string
+  body: string[]
+  visual: string  // SVG or img URL
+  visualPosition: 'left' | 'right'
+  chapterId: string
+  pageNumber: number
+  totalPages: number
+}
+
+export function TextVisualSplit({ theme, title, body, visual, visualPosition, chapterId, pageNumber, totalPages }: Props) {
+  const isLeft = visualPosition === 'left'
+  
+  return (
+    <div 
+      className="slide"
+      style={{
+        width: '1024px',
+        height: '768px',
+        padding: theme.pagePadding,
+        background: theme.bg,
+        fontFamily: theme.fontBody,
+        color: theme.text,
+        display: 'flex',
+        flexDirection: isLeft ? 'row' : 'row-reverse',
+        gap: '48px',
+      }}
+    >
+      {/* Visual側 */}
+      <div style={{ flex: 1 }}>
+        <div dangerouslySetInnerHTML={{ __html: visual }} />
+      </div>
+      
+      {/* Text側 */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+        <div style={{ 
+          fontSize: '10px', 
+          color: theme.textSub, 
+          marginBottom: '12px',
+          fontWeight: 600,
+          letterSpacing: '0.1em',
+        }}>
+          {chapterId.toUpperCase()}
+        </div>
+        
+        <h2 style={{ 
+          fontSize: theme.headingSize, 
+          fontWeight: theme.titleWeight,
+          fontFamily: theme.fontTitle,
+          marginBottom: '24px',
+          lineHeight: 1.3,
+        }}>
+          {title}
+        </h2>
+        
+        <div style={{ fontSize: theme.bodySize, lineHeight: 1.8 }}>
+          {body.map((p, i) => (
+            <p key={i} style={{ marginBottom: '16px' }}>{p}</p>
+          ))}
+        </div>
+      </div>
+      
+      {/* Footer */}
+      <div style={{
+        position: 'absolute',
+        bottom: '24px',
+        right: '24px',
+        fontSize: '10px',
+        color: theme.textSub,
+      }}>
+        {pageNumber} / {totalPages}
+      </div>
+    </div>
+  )
+}
+```
+
+---
+
+## PDF生成（Puppeteer）
+
+### 概要
+
+HTMLスライドをPuppeteerでレンダリングし、PDFに変換する。
+
+### 実装
+
+```typescript
+// src/lib/pdf-generator.ts
+import puppeteer from 'puppeteer'
+
+interface PdfOptions {
+  orientation: 'landscape' | 'portrait'
+  slides: string[]  // HTML文字列の配列
+}
+
+export async function generatePdf(options: PdfOptions): Promise<Buffer> {
+  const { orientation, slides } = options
+  
+  const browser = await puppeteer.launch({ headless: true })
+  const page = await browser.newPage()
+  
+  const width = orientation === 'landscape' ? 1024 : 768
+  const height = orientation === 'landscape' ? 768 : 1024
+  
+  await page.setViewport({ width, height })
+  
+  const pdfBuffers: Buffer[] = []
+  
+  for (const slideHtml of slides) {
+    await page.setContent(slideHtml, { waitUntil: 'networkidle0' })
+    
+    const pdf = await page.pdf({
+      width: `${width}px`,
+      height: `${height}px`,
+      printBackground: true,
+    })
+    
+    pdfBuffers.push(pdf)
+  }
+  
+  await browser.close()
+  
+  // PDF結合（pdf-lib）
+  return mergePdfs(pdfBuffers)
+}
+```
+
+---
+
+## SgGeneration履歴管理
+
+### スキーマ追加
 
 ```prisma
 model SgGeneration {
   id           String   @id @default(cuid())
   versionId    String
   version      ProposalVersion @relation(fields: [versionId], references: [id])
-  status       String   @default("RUNNING")  // RUNNING | COMPLETED | ERROR
-  currentStep  String?  // 現在実行中のSGエージェントID（SG-01〜SG-06）
+  
+  // パラメータ
+  proposalType String           // full | strategy | analysis | content | improvement
+  tone         String           // simple | rich | pop
+  orientation  String           // landscape | portrait
+  slideCount   Int
   params       String   @default("{}")
   
-  // 各SGの出力を個別に保存（再開用）
+  // 各SGの出力（再開用）
   sg01Output   String?
   sg02Output   String?
   sg03Output   String?
@@ -158,361 +421,56 @@ model SgGeneration {
   sg05Output   String?
   sg06Output   String?
   
-  outputJson   String   @default("")  // 最終出力
+  // 最終出力
+  slidesJson   String?          // 全スライドのJSON
+  pdfPath      String?          // 生成されたPDFのパス
+  
+  status       String   @default("RUNNING")
+  currentStep  String?
   errorMessage String?
   startedAt    DateTime @default(now())
   completedAt  DateTime?
 }
 ```
 
-**src/app/api/versions/[id]/sg-pipeline/route.ts 修正:**
+### 履歴一覧表示
+
+同じ分析データから複数の提案書を生成できる。
+- 種別: フル提案 / 戦略提案 / 分析提案
+- トーン: Simple / Rich / Pop
+- 向き: A4ヨコ / A4タテ
+
+履歴として全て保存し、いつでもダウンロード可能。
+
+---
+
+## ページ単位の修正機能
+
+### API
 
 ```typescript
-export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const { id: versionId } = await params
-  const { params: sgParams, resume } = await req.json() as { params: SgParams; resume?: boolean }
-
-  // 既存のERROR状態のSgGenerationを検索
-  let sg = resume 
-    ? await prisma.sgGeneration.findFirst({
-        where: { versionId, status: 'ERROR' },
-        orderBy: { startedAt: 'desc' },
-      })
-    : null
-
-  // なければ新規作成
-  if (!sg) {
-    sg = await prisma.sgGeneration.create({
-      data: { versionId, status: 'RUNNING', params: JSON.stringify(sgParams) },
-    })
-  } else {
-    // 再開の場合はstatusをRUNNINGに戻す
-    await prisma.sgGeneration.update({
-      where: { id: sg.id },
-      data: { status: 'RUNNING', errorMessage: null },
-    })
-  }
-
-  // 既存の出力を復元
-  const existingOutputs: Partial<Record<SgAgentId, unknown>> = {}
-  if (sg.sg01Output) existingOutputs['SG-01'] = JSON.parse(sg.sg01Output)
-  if (sg.sg02Output) existingOutputs['SG-02'] = JSON.parse(sg.sg02Output)
-  if (sg.sg03Output) existingOutputs['SG-03'] = JSON.parse(sg.sg03Output)
-  if (sg.sg04Output) existingOutputs['SG-04'] = JSON.parse(sg.sg04Output)
-  if (sg.sg05Output) existingOutputs['SG-05'] = JSON.parse(sg.sg05Output)
-  if (sg.sg06Output) existingOutputs['SG-06'] = JSON.parse(sg.sg06Output)
-
-  // runSgPipelineに既存出力を渡す
-  const result = await runSgPipeline(
-    sg.id,  // generationId
-    clientName,
-    briefText,
-    agOutputs,
-    sgParams,
-    existingOutputs,  // 再開用
-    async (stepId, name, output) => {
-      // 各ステップ完了時にDBに保存
-      const field = `sg0${stepId.slice(-1)}Output`
-      await prisma.sgGeneration.update({
-        where: { id: sg.id },
-        data: { 
-          currentStep: stepId,
-          [field]: JSON.stringify(output),
-        },
-      })
-      send({ type: 'step', agentId: stepId, name })
-    },
-  )
-  // ...
-}
-```
-
-**src/lib/sg-pipeline.ts 修正:**
-
-```typescript
-export async function runSgPipeline(
-  generationId: string,
-  clientName: string,
-  briefText: string,
-  agOutputs: Record<string, unknown>,
-  params: SgParams,
-  existingOutputs: Partial<Record<SgAgentId, unknown>>,  // 再開用
-  onProgress?: (stepId: SgAgentId, name: string, output: unknown) => Promise<void>,
-): Promise<SgPipelineResult> {
-  const agents = [
-    new Sg01Agent(),
-    new Sg02Agent(),
-    new Sg03Agent(),
-    new Sg04Agent(),
-    new Sg05Agent(),
-    new Sg06Agent(),
-  ]
-
-  // 既存の出力をコピー
-  const sgOutputs: Partial<Record<SgAgentId, unknown>> = { ...existingOutputs }
-
-  for (const agent of agents) {
-    // 既に出力がある場合はスキップ
-    if (sgOutputs[agent.id]) {
-      continue
-    }
-
-    const input: SgInput = {
-      clientName,
-      briefText,
-      params,
-      agOutputs,
-      sgOutputs,
-    }
-
-    const output = await agent.run(input)
-    sgOutputs[agent.id] = output
-    
-    // コールバックでDB保存
-    await onProgress?.(agent.id, agent.name, output)
-  }
-
-  return {
-    finalOutput: sgOutputs['SG-06'] as SgFinalOutput,
-    allOutputs: sgOutputs,
-  }
-}
-```
-
-### C. SG-04の分割実行
-    const sg01 = input.sgOutputs['SG-01'] as Sg01Output | undefined
-    const chapters = sg01?.chapters ?? []
-    
-    const allSlides: Slide[] = []
-    
-    for (const chapter of chapters) {
-      // このチャプターのスロットだけを対象に
-      const chapterSlots = this.getSlotsForChapter(chapter, input)
-      
-      const partialInput = { ...input, _chapterFilter: chapter.id }
-      const result = await this.runSingleChapter(partialInput, chapterSlots)
-      allSlides.push(...result.slides)
-    }
-    
-    return { slides: allSlides }
-  }
-}
-```
-
-### B. 専用ページでの実行
-
-ポップアップではなく、専用ページ `/projects/[id]/slides` で実行する。
-
-**新規ファイル: src/app/projects/[id]/slides/page.tsx**
-
-```
-/projects/[id]/slides
-├── パラメータ設定セクション
-├── 実行ボタン
-├── 進捗表示（リアルタイム）
-├── 各SGの出力プレビュー
-└── ダウンロードボタン
-```
-
-- ページを離れても実行は継続（バックエンド側で完結）
-- ページに戻ると現在の状態を表示
-- 完了後にpptxダウンロード可能
-
-### C. 各ステップの結果をDBに保存
-
-**prisma/schema.prisma 修正:**
-
-```prisma
-model SgGeneration {
-  id           String   @id @default(cuid())
-  versionId    String
-  version      ProposalVersion @relation(fields: [versionId], references: [id])
-  status       String   @default("RUNNING")  // RUNNING | COMPLETED | ERROR
-  currentStep  String?  // 現在実行中のSGエージェントID
-  params       String   @default("{}")        // JSON: SgParams
-  
-  // 各SGの出力を個別に保存
-  sg01Output   String?  // JSON
-  sg02Output   String?  // JSON
-  sg03Output   String?  // JSON
-  sg04Output   String?  // JSON
-  sg05Output   String?  // JSON
-  sg06Output   String?  // JSON
-  
-  errorMessage String?
-  startedAt    DateTime @default(now())
-  completedAt  DateTime?
-}
-```
-
-### D. 再開機能
-
-**src/lib/sg-pipeline.ts 修正:**
-
-```typescript
-export async function runSgPipeline(
-  generationId: string,  // DB ID
-  resumeFrom?: SgAgentId,  // 再開位置
-): Promise<SgPipelineResult> {
-  const generation = await prisma.sgGeneration.findUnique({ where: { id: generationId } })
-  
-  // 既存の出力を復元
-  const sgOutputs: Partial<Record<SgAgentId, unknown>> = {}
-  if (generation.sg01Output) sgOutputs['SG-01'] = JSON.parse(generation.sg01Output)
-  if (generation.sg02Output) sgOutputs['SG-02'] = JSON.parse(generation.sg02Output)
-  // ...
-  
-  const agents = [
-    new Sg01Agent(),
-    new Sg02Agent(),
-    new Sg03Agent(),
-    new Sg04Agent(),
-    new Sg05Agent(),
-    new Sg06Agent(),
-  ]
-  
-  // 再開位置を特定
-  const startIndex = resumeFrom 
-    ? agents.findIndex(a => a.id === resumeFrom)
-    : agents.findIndex(a => !sgOutputs[a.id])
-  
-  for (let i = startIndex; i < agents.length; i++) {
-    const agent = agents[i]
-    
-    // 現在のステップを更新
-    await prisma.sgGeneration.update({
-      where: { id: generationId },
-      data: { currentStep: agent.id },
-    })
-    
-    try {
-      const output = await agent.run(input)
-      sgOutputs[agent.id] = output
-      
-      // 出力をDBに保存（即時）
-      await prisma.sgGeneration.update({
-        where: { id: generationId },
-        data: { [`sg0${i+1}Output`]: JSON.stringify(output) },
-      })
-    } catch (err) {
-      await prisma.sgGeneration.update({
-        where: { id: generationId },
-        data: { status: 'ERROR', errorMessage: String(err) },
-      })
-      throw err
-    }
-  }
-  
-  await prisma.sgGeneration.update({
-    where: { id: generationId },
-    data: { status: 'COMPLETED', completedAt: new Date() },
-  })
-  
-  return { finalOutput: sgOutputs['SG-06'] as SgFinalOutput, allOutputs: sgOutputs }
-}
-```
-
-### E. APIルート修正
-
-**src/app/api/versions/[id]/sg-pipeline/route.ts:**
-
-```typescript
+// POST /api/sg-generation/[id]/revise
 export async function POST(req: Request, { params }: { params: { id: string } }) {
-  const versionId = params.id
-  const { params: sgParams, resumeFrom } = await req.json()
+  const { pageNumber, instruction } = await req.json()
   
-  // 既存のgenerationを検索 or 新規作成
-  let generation = await prisma.sgGeneration.findFirst({
-    where: { versionId, status: { not: 'COMPLETED' } },
-  })
+  const sg = await prisma.sgGeneration.findUnique({ where: { id: params.id } })
+  const slides = JSON.parse(sg.slidesJson)
+  const targetSlide = slides[pageNumber - 1]
   
-  if (!generation) {
-    generation = await prisma.sgGeneration.create({
-      data: { versionId, params: JSON.stringify(sgParams) },
-    })
-  }
+  // SG-REVISEエージェントで修正
+  const revised = await reviseSlide(targetSlide, instruction, sg.params)
   
-  // バックグラウンドで実行（レスポンスは即座に返す）
-  runSgPipeline(generation.id, resumeFrom).catch(console.error)
-  
-  return Response.json({ generationId: generation.id })
-}
-```
-
-**ステータス取得API:**
-
-```typescript
-// GET /api/sg-generation/[id]/status
-export async function GET(req: Request, { params }: { params: { id: string } }) {
-  const generation = await prisma.sgGeneration.findUnique({
+  // 更新
+  slides[pageNumber - 1] = revised
+  await prisma.sgGeneration.update({
     where: { id: params.id },
+    data: { slidesJson: JSON.stringify(slides) },
   })
   
-  return Response.json({
-    status: generation.status,
-    currentStep: generation.currentStep,
-    hasOutput: {
-      'SG-01': !!generation.sg01Output,
-      'SG-02': !!generation.sg02Output,
-      // ...
-    },
-    errorMessage: generation.errorMessage,
-  })
-}
-```
-
-### F. UIページ
-
-**src/app/projects/[id]/slides/page.tsx:**
-
-```tsx
-'use client'
-
-export default function SlidesPage({ params }: { params: { id: string } }) {
-  const versionId = params.id
-  const [generation, setGeneration] = useState<SgGeneration | null>(null)
-  const [status, setStatus] = useState<'idle' | 'running' | 'error' | 'completed'>('idle')
+  // PDF再生成
+  await regeneratePdf(params.id)
   
-  // ポーリングでステータス取得
-  useEffect(() => {
-    if (!generation) return
-    const interval = setInterval(async () => {
-      const res = await fetch(`/api/sg-generation/${generation.id}/status`)
-      const data = await res.json()
-      setStatus(data.status)
-      if (data.status === 'COMPLETED' || data.status === 'ERROR') {
-        clearInterval(interval)
-      }
-    }, 2000)
-    return () => clearInterval(interval)
-  }, [generation])
-  
-  const handleStart = async () => {
-    const res = await fetch(`/api/versions/${versionId}/sg-pipeline`, {
-      method: 'POST',
-      body: JSON.stringify({ params }),
-    })
-    const { generationId } = await res.json()
-    setGeneration({ id: generationId })
-    setStatus('running')
-  }
-  
-  const handleResume = async () => {
-    await fetch(`/api/versions/${versionId}/sg-pipeline`, {
-      method: 'POST',
-      body: JSON.stringify({ resumeFrom: generation.currentStep }),
-    })
-    setStatus('running')
-  }
-  
-  return (
-    <div>
-      {/* パラメータ設定 */}
-      {/* 進捗表示 */}
-      {/* エラー時: 再開ボタン */}
-      {/* 完了時: ダウンロードボタン */}
-    </div>
-  )
+  return Response.json({ success: true })
 }
 ```
 
@@ -520,324 +478,25 @@ export default function SlidesPage({ params }: { params: { id: string } }) {
 
 ## 実装順序
 
-1. prisma スキーマ修正（SgGenerationに sg01Output〜sg06Output, currentStep 追加）+ db push
-2. sg-base-agent.ts JSONパース改善（閉じカッコ補完）
-3. SG-04 分割実行対応（チャプターごとに分割）
-4. sg-pipeline.ts 再開機能対応（既存出力をスキップ）
-5. API修正（sg-pipeline: 既存ERROR検索、各ステップ保存）
-6. /api/projects 修正（sgGenerationの状態を返す）
-7. TOPページ（page.tsx）にボタン追加
-8. /projects/[id]/slides ページ作成
-9. 既存のポップアップを削除 or 新ページへのリンクに変更
+1. **prisma スキーマ修正** + db push
+2. **テーマ定義** — Simple/Rich/Popの定数定義
+3. **スライドテンプレート作成** — 10種のReactコンポーネント
+4. **SG-05 修正** — レイアウト＋図解データ生成
+5. **SG-06-VIZ 新規作成** — SVG/図解生成
+6. **HTMLスライドレンダラー** — テーマ適用
+7. **PDF生成** — Puppeteer
+8. **専用ページ** `/projects/[id]/slides`
+9. **再開機能** — 各SG出力をDB保存
+10. **修正機能** — ページ単位の修正API + UI
+11. **TOPページボタン** — 確認/DLボタン追加
 
 ---
 
-## 補足: JSONパース改善
+## 補足: pptxは諦める
 
-SG系でもJSONパース失敗時のリカバリを追加:
+pptxgenjsで「使える」提案書を作るのは現実的に厳しい。
+- テキスト配置・フォント・行間の微調整が困難
+- 図・ビジュアルはSVGか画像を別途生成して貼る必要がある
+- レイアウトの「良さ」をロジックで表現する限界
 
-**src/agents/sg-base-agent.ts:**
-
-```typescript
-protected parseOutput(raw: string): unknown {
-  // コードフェンス除去
-  let cleaned = raw
-    .replace(/^```json\s*/m, '')
-    .replace(/^```\s*/m, '')
-    .replace(/\s*```$/m, '')
-    .trim()
-  
-  // JSON開始位置を探す
-  const jsonStart = cleaned.search(/[\[{]/)
-  if (jsonStart > 0) {
-    cleaned = cleaned.slice(jsonStart)
-  }
-  
-  // 途中で切れている場合の補完
-  try {
-    return JSON.parse(cleaned)
-  } catch {
-    // 閉じカッコ補完を試行
-    const openBraces = (cleaned.match(/{/g) || []).length
-    const closeBraces = (cleaned.match(/}/g) || []).length
-    const openBrackets = (cleaned.match(/\[/g) || []).length
-    const closeBrackets = (cleaned.match(/]/g) || []).length
-    
-    let fixed = cleaned
-    for (let i = 0; i < openBrackets - closeBrackets; i++) fixed += ']'
-    for (let i = 0; i < openBraces - closeBraces; i++) fixed += '}'
-    
-    try {
-      return JSON.parse(fixed)
-    } catch {
-      throw new Error(`JSON parse failed. Raw: ${raw.slice(0, 500)}`)
-    }
-  }
-}
-```
-
----
-
-## G. A4サイズ選択（ヨコ/タテ）
-
-### パラメータ追加
-
-**src/agents/sg-types.ts:**
-
-```typescript
-export type SlideOrientation = 'landscape' | 'portrait'
-
-export interface SgParams {
-  type: SlideProposalType
-  slideCount: number
-  focusChapters: FocusChapter[]
-  tone: SlideTone
-  audience: SlideAudience
-  orientation: SlideOrientation  // ← 追加
-}
-```
-
-### UI追加
-
-**SlideGeneratorPanel.tsx または /projects/[id]/slides/page.tsx:**
-
-```tsx
-const ORIENTATIONS: { value: SlideOrientation; label: string; desc: string }[] = [
-  { value: 'landscape', label: 'A4ヨコ', desc: '16:9相当・プレゼン向き' },
-  { value: 'portrait',  label: 'A4タテ', desc: '報告書・印刷向き' },
-]
-
-const [orientation, setOrientation] = useState<SlideOrientation>('landscape')
-```
-
-### pptx-generator.ts 修正
-
-```typescript
-// サイズ定数
-const SIZES = {
-  landscape: { w: 10, h: 7.5 },      // A4ヨコ相当（インチ）
-  portrait:  { w: 7.5, h: 10 },      // A4タテ相当（インチ）
-}
-
-export function generatePptx(output: SgFinalOutput, orientation: SlideOrientation = 'landscape'): PptxGenJS {
-  const pptx = new PptxGenJS()
-  const size = SIZES[orientation]
-  
-  pptx.defineLayout({ name: 'A4', width: size.w, height: size.h })
-  pptx.layout = 'A4'
-  
-  // 以降のレイアウト計算もsize.w, size.hを使う
-  // ...
-}
-```
-
-### PDF出力
-
-pptxgenjsはPDF出力をサポートしていないため、以下の選択肢:
-
-**案A: pptx → PDF変換サービス**
-- LibreOffice (headless) をサーバーに入れて変換
-- `libreoffice --headless --convert-to pdf input.pptx`
-
-**案B: PDFを直接生成（pdf-lib）**
-- pptxとは別にpdf-libでPDFを直接生成
-- レイアウトロジックを共通化
-
-**推奨**: 案Aが実装コスト低い。Dockerで `libreoffice` を使えるようにする。
-
-```typescript
-// src/lib/pdf-converter.ts
-import { execSync } from 'child_process'
-import { writeFileSync, readFileSync, unlinkSync } from 'fs'
-import { join } from 'path'
-import { tmpdir } from 'os'
-
-export async function convertPptxToPdf(pptxBuffer: Buffer): Promise<Buffer> {
-  const tmpDir = tmpdir()
-  const inputPath = join(tmpDir, `slide_${Date.now()}.pptx`)
-  const outputPath = inputPath.replace('.pptx', '.pdf')
-  
-  writeFileSync(inputPath, pptxBuffer)
-  
-  try {
-    execSync(`libreoffice --headless --convert-to pdf --outdir ${tmpDir} ${inputPath}`, {
-      timeout: 60000,
-    })
-    const pdfBuffer = readFileSync(outputPath)
-    return pdfBuffer
-  } finally {
-    try { unlinkSync(inputPath) } catch {}
-    try { unlinkSync(outputPath) } catch {}
-  }
-}
-```
-
----
-
-## H. ページ単位の修正機能
-
-完成したPDFに対してページ指定で修正指示を出し、該当スライドのみ再生成する。
-
-### データ構造
-
-```typescript
-interface SlideRevisionRequest {
-  sgGenerationId: string
-  pageNumber: number       // 1-indexed
-  instruction: string      // 修正指示
-}
-
-interface SlideRevisionResult {
-  pageNumber: number
-  before: SgFinalSlide
-  after: SgFinalSlide
-}
-```
-
-### API
-
-**POST /api/sg-generation/[id]/revise**
-
-```typescript
-export async function POST(req: Request, { params }: { params: { id: string } }) {
-  const { pageNumber, instruction } = await req.json()
-  
-  const sg = await prisma.sgGeneration.findUnique({ where: { id: params.id } })
-  if (!sg || sg.status !== 'COMPLETED') {
-    return Response.json({ error: 'Not found or not completed' }, { status: 404 })
-  }
-  
-  const output = JSON.parse(sg.outputJson) as SgFinalOutput
-  const targetSlide = output.slides[pageNumber - 1]  // 0-indexed
-  
-  if (!targetSlide) {
-    return Response.json({ error: 'Invalid page number' }, { status: 400 })
-  }
-  
-  // SG-04を該当スライドのみ再実行
-  const revisedSlide = await reviseSlide(targetSlide, instruction, output.concept, sg.params)
-  
-  // 出力を更新
-  output.slides[pageNumber - 1] = revisedSlide
-  
-  await prisma.sgGeneration.update({
-    where: { id: params.id },
-    data: { outputJson: JSON.stringify(output) },
-  })
-  
-  return Response.json({ success: true, slide: revisedSlide })
-}
-```
-
-### 修正専用エージェント
-
-**src/agents/sg-revise.ts:**
-
-```typescript
-export class SgReviseAgent extends SgBaseAgent {
-  id = 'SG-REVISE' as SgAgentId
-  name = 'スライド修正'
-  protected modelType = 'quality' as const
-  protected maxTokens = 2048
-
-  getSystemPrompt(): string {
-    return `あなたは提案書スライドの修正担当です。
-指定されたスライドを、修正指示に従って改善してください。
-
-【重要】
-- 指示された部分のみ修正し、他は維持
-- トーンやフォーマットは元のスライドを踏襲
-- 修正理由を簡潔にnotesに記載
-
-出力はJSON形式のみ：
-{
-  "title": "修正後の見出し",
-  "body": ["修正後の本文1", "修正後の本文2"],
-  "notes": "修正箇所: xxx → yyy",
-  "visualHint": "（変更があれば）"
-}`
-  }
-
-  buildUserMessage(slide: SgFinalSlide, instruction: string, concept: Sg02Output): string {
-    return `## 現在のスライド
-タイトル: ${slide.title}
-本文: ${slide.body.join(' / ')}
-ノート: ${slide.notes}
-
-## キーメッセージ（参考）
-${concept.keyMessage}
-
-## 修正指示
-${instruction}
-
-上記の指示に従ってスライドを修正してください。`
-  }
-}
-```
-
-### UI
-
-**/projects/[id]/slides ページに修正セクション追加:**
-
-```tsx
-const [reviseMode, setReviseMode] = useState(false)
-const [targetPage, setTargetPage] = useState<number | null>(null)
-const [reviseInstruction, setReviseInstruction] = useState('')
-
-{generation?.status === 'COMPLETED' && (
-  <div style={{ marginTop: '24px', padding: '16px', border: '1px solid var(--line2)' }}>
-    <div style={{ fontFamily: 'var(--font-d)', fontSize: '11px', fontWeight: 700, marginBottom: '12px' }}>
-      ページ修正
-    </div>
-    
-    <div style={{ display: 'flex', gap: '12px', marginBottom: '12px' }}>
-      <input
-        type="number"
-        min={1}
-        max={slides.length}
-        placeholder="ページ番号"
-        value={targetPage ?? ''}
-        onChange={e => setTargetPage(Number(e.target.value))}
-        style={{ width: '80px', padding: '8px' }}
-      />
-      <span style={{ alignSelf: 'center', fontSize: '12px', color: 'var(--ink3)' }}>
-        / {slides.length}ページ
-      </span>
-    </div>
-    
-    <textarea
-      placeholder="修正指示（例: 見出しをもっとインパクトのある表現に変更して）"
-      value={reviseInstruction}
-      onChange={e => setReviseInstruction(e.target.value)}
-      style={{ width: '100%', minHeight: '80px', padding: '12px', marginBottom: '12px' }}
-    />
-    
-    <button
-      onClick={handleRevise}
-      disabled={!targetPage || !reviseInstruction}
-      style={{ padding: '10px 20px', background: 'var(--ink)', color: 'var(--bg)' }}
-    >
-      このページを修正 →
-    </button>
-  </div>
-)}
-```
-
----
-
-## 実装順序（更新）
-
-1. prisma スキーマ修正 + db push
-2. sg-types.ts に orientation 追加
-3. sg-base-agent.ts JSONパース改善
-4. SG-04 分割実行
-5. sg-pipeline.ts 再開機能
-6. pptx-generator.ts にサイズ選択対応
-7. PDF変換（LibreOffice headless）
-8. API修正（sg-pipeline、/api/projects）
-9. TOPページにボタン追加
-10. /projects/[id]/slides ページ作成（サイズ選択UI含む）
-11. SG-REVISE エージェント作成
-12. 修正API（/api/sg-generation/[id]/revise）
-13. 修正UI追加
-14. 既存ポップアップを新ページへのリンクに変更
+**結論: HTMLスライド → PDF に一本化する。**
