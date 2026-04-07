@@ -5,26 +5,281 @@
 1. **SG-04でJSON出力が途中で切れる** — max_tokens 8192では25枚以上のスライドで不足
 2. **ポップアップ依存** — ウィンドウを閉じると処理が止まる
 3. **再開機能なし** — エラー時に最初からやり直し
+4. **TOPページに完了状態のボタンがない** — AG/SG完了後の確認・DL導線がない
+5. **SG再開が最初から始まる** — SG-04で失敗してもSG-01から再開される
 
 ---
 
 ## 改善内容
 
-### A. SG-04の分割実行
+### A. TOPページのカードにボタン追加
 
-25枚のスライド全てを1回で生成するのは無理がある。チャプターごとに分割実行する。
+完了状態の案件カードに「分析確認」「提案書DL」ボタンを追加。
 
-**src/agents/sg-04.ts を修正:**
+**src/app/page.tsx 修正:**
+
+```tsx
+// Project型にSG完了状態を追加
+interface Project {
+  // ...既存
+  sgGeneration?: {
+    id: string
+    status: string
+  } | null
+}
+
+// カード内にボタン追加（cardStatus === 'done' の場合）
+{cardStatus === 'done' && (
+  <div style={{ 
+    display: 'flex', 
+    gap: '8px', 
+    marginTop: '12px',
+    borderTop: '1px solid var(--line2)',
+    paddingTop: '12px',
+  }}>
+    <button
+      onClick={(e) => {
+        e.stopPropagation()
+        router.push(`/projects/${p.id}`)
+      }}
+      style={{
+        flex: 1,
+        padding: '8px 12px',
+        fontSize: '10px',
+        fontFamily: 'var(--font-d)',
+        fontWeight: 700,
+        letterSpacing: '0.1em',
+        background: 'var(--bg2)',
+        border: '1px solid var(--line2)',
+        cursor: 'pointer',
+      }}
+    >
+      分析確認
+    </button>
+    
+    {p.sgGeneration?.status === 'COMPLETED' ? (
+      <button
+        onClick={(e) => {
+          e.stopPropagation()
+          window.location.href = `/api/versions/${latestVersion.id}/sg-download`
+        }}
+        style={{
+          flex: 1,
+          padding: '8px 12px',
+          fontSize: '10px',
+          fontFamily: 'var(--font-d)',
+          fontWeight: 700,
+          letterSpacing: '0.1em',
+          background: 'var(--ink)',
+          color: 'var(--bg)',
+          border: 'none',
+          cursor: 'pointer',
+        }}
+      >
+        提案書DL
+      </button>
+    ) : (
+      <button
+        onClick={(e) => {
+          e.stopPropagation()
+          router.push(`/projects/${p.id}/slides`)
+        }}
+        style={{
+          flex: 1,
+          padding: '8px 12px',
+          fontSize: '10px',
+          fontFamily: 'var(--font-d)',
+          fontWeight: 700,
+          letterSpacing: '0.1em',
+          background: 'transparent',
+          border: '1px solid var(--line2)',
+          cursor: 'pointer',
+        }}
+      >
+        提案書作成
+      </button>
+    )}
+  </div>
+)}
+```
+
+**API修正（/api/projects）:**
+
+SgGenerationの最新状態も返すようにする。
 
 ```typescript
-export class Sg04Agent extends SgBaseAgent {
-  id: SgAgentId = 'SG-04'
-  name = '本文生成'
-  protected modelType = 'quality' as const
-  protected maxTokens = 4096  // 1チャプター分に縮小
+const projects = await prisma.project.findMany({
+  include: {
+    client: true,
+    versions: {
+      orderBy: { versionNumber: 'desc' },
+      take: 1,
+      include: {
+        executions: { select: { agentId: true, status: true, isInherited: true } },
+        sgGenerations: { orderBy: { startedAt: 'desc' }, take: 1 },
+      },
+    },
+  },
+  orderBy: { createdAt: 'desc' },
+})
 
-  // チャプターごとに分割実行
-  async run(input: SgInput): Promise<Sg04Output> {
+// レスポンス整形でsgGenerationを含める
+return projects.map(p => ({
+  ...p,
+  versions: p.versions.map(v => ({
+    ...v,
+    sgGeneration: v.sgGenerations[0] ?? null,
+  })),
+}))
+```
+
+### B. SG再開機能の修正（失敗箇所から再開）
+
+**問題**: 現在の実装は毎回新規のSgGenerationを作成し、SG-01から実行している。
+
+**修正**: 既存のERROR状態のSgGenerationを検索し、保存済みの出力を復元して失敗箇所から再開。
+
+**prisma/schema.prisma 修正:**
+
+```prisma
+model SgGeneration {
+  id           String   @id @default(cuid())
+  versionId    String
+  version      ProposalVersion @relation(fields: [versionId], references: [id])
+  status       String   @default("RUNNING")  // RUNNING | COMPLETED | ERROR
+  currentStep  String?  // 現在実行中のSGエージェントID（SG-01〜SG-06）
+  params       String   @default("{}")
+  
+  // 各SGの出力を個別に保存（再開用）
+  sg01Output   String?
+  sg02Output   String?
+  sg03Output   String?
+  sg04Output   String?
+  sg05Output   String?
+  sg06Output   String?
+  
+  outputJson   String   @default("")  // 最終出力
+  errorMessage String?
+  startedAt    DateTime @default(now())
+  completedAt  DateTime?
+}
+```
+
+**src/app/api/versions/[id]/sg-pipeline/route.ts 修正:**
+
+```typescript
+export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id: versionId } = await params
+  const { params: sgParams, resume } = await req.json() as { params: SgParams; resume?: boolean }
+
+  // 既存のERROR状態のSgGenerationを検索
+  let sg = resume 
+    ? await prisma.sgGeneration.findFirst({
+        where: { versionId, status: 'ERROR' },
+        orderBy: { startedAt: 'desc' },
+      })
+    : null
+
+  // なければ新規作成
+  if (!sg) {
+    sg = await prisma.sgGeneration.create({
+      data: { versionId, status: 'RUNNING', params: JSON.stringify(sgParams) },
+    })
+  } else {
+    // 再開の場合はstatusをRUNNINGに戻す
+    await prisma.sgGeneration.update({
+      where: { id: sg.id },
+      data: { status: 'RUNNING', errorMessage: null },
+    })
+  }
+
+  // 既存の出力を復元
+  const existingOutputs: Partial<Record<SgAgentId, unknown>> = {}
+  if (sg.sg01Output) existingOutputs['SG-01'] = JSON.parse(sg.sg01Output)
+  if (sg.sg02Output) existingOutputs['SG-02'] = JSON.parse(sg.sg02Output)
+  if (sg.sg03Output) existingOutputs['SG-03'] = JSON.parse(sg.sg03Output)
+  if (sg.sg04Output) existingOutputs['SG-04'] = JSON.parse(sg.sg04Output)
+  if (sg.sg05Output) existingOutputs['SG-05'] = JSON.parse(sg.sg05Output)
+  if (sg.sg06Output) existingOutputs['SG-06'] = JSON.parse(sg.sg06Output)
+
+  // runSgPipelineに既存出力を渡す
+  const result = await runSgPipeline(
+    sg.id,  // generationId
+    clientName,
+    briefText,
+    agOutputs,
+    sgParams,
+    existingOutputs,  // 再開用
+    async (stepId, name, output) => {
+      // 各ステップ完了時にDBに保存
+      const field = `sg0${stepId.slice(-1)}Output`
+      await prisma.sgGeneration.update({
+        where: { id: sg.id },
+        data: { 
+          currentStep: stepId,
+          [field]: JSON.stringify(output),
+        },
+      })
+      send({ type: 'step', agentId: stepId, name })
+    },
+  )
+  // ...
+}
+```
+
+**src/lib/sg-pipeline.ts 修正:**
+
+```typescript
+export async function runSgPipeline(
+  generationId: string,
+  clientName: string,
+  briefText: string,
+  agOutputs: Record<string, unknown>,
+  params: SgParams,
+  existingOutputs: Partial<Record<SgAgentId, unknown>>,  // 再開用
+  onProgress?: (stepId: SgAgentId, name: string, output: unknown) => Promise<void>,
+): Promise<SgPipelineResult> {
+  const agents = [
+    new Sg01Agent(),
+    new Sg02Agent(),
+    new Sg03Agent(),
+    new Sg04Agent(),
+    new Sg05Agent(),
+    new Sg06Agent(),
+  ]
+
+  // 既存の出力をコピー
+  const sgOutputs: Partial<Record<SgAgentId, unknown>> = { ...existingOutputs }
+
+  for (const agent of agents) {
+    // 既に出力がある場合はスキップ
+    if (sgOutputs[agent.id]) {
+      continue
+    }
+
+    const input: SgInput = {
+      clientName,
+      briefText,
+      params,
+      agOutputs,
+      sgOutputs,
+    }
+
+    const output = await agent.run(input)
+    sgOutputs[agent.id] = output
+    
+    // コールバックでDB保存
+    await onProgress?.(agent.id, agent.name, output)
+  }
+
+  return {
+    finalOutput: sgOutputs['SG-06'] as SgFinalOutput,
+    allOutputs: sgOutputs,
+  }
+}
+```
+
+### C. SG-04の分割実行
     const sg01 = input.sgOutputs['SG-01'] as Sg01Output | undefined
     const chapters = sg01?.chapters ?? []
     
@@ -265,12 +520,15 @@ export default function SlidesPage({ params }: { params: { id: string } }) {
 
 ## 実装順序
 
-1. prisma スキーマ修正（SgGeneration拡張）+ migrate
-2. SG-04 分割実行対応
-3. sg-pipeline.ts 再開機能対応
-4. API修正（sg-pipeline, sg-generation/[id]/status）
-5. /projects/[id]/slides ページ作成
-6. 既存のポップアップを削除 or 新ページへのリンクに変更
+1. prisma スキーマ修正（SgGenerationに sg01Output〜sg06Output, currentStep 追加）+ db push
+2. sg-base-agent.ts JSONパース改善（閉じカッコ補完）
+3. SG-04 分割実行対応（チャプターごとに分割）
+4. sg-pipeline.ts 再開機能対応（既存出力をスキップ）
+5. API修正（sg-pipeline: 既存ERROR検索、各ステップ保存）
+6. /api/projects 修正（sgGenerationの状態を返す）
+7. TOPページ（page.tsx）にボタン追加
+8. /projects/[id]/slides ページ作成
+9. 既存のポップアップを削除 or 新ページへのリンクに変更
 
 ---
 
