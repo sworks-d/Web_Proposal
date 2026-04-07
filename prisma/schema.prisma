@@ -115,19 +115,34 @@ model ProposalSlide {
 model SgGeneration {
   id           String          @id @default(cuid())
   versionId    String
-  version      ProposalVersion @relation(fields: [versionId], references: [id])
-  status       String          @default("RUNNING")  // RUNNING | COMPLETED | ERROR
-  currentStep  String?                               // 現在実行中のSGエージェントID
-  params       String          @default("{}")        // JSON: SgParams
+  version      ProposalVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+
+  // パラメータ
+  proposalType String          @default("auto")     // insight | data | vision | solution | auto
+  tone         String          @default("simple")   // simple | rich | pop
+  orientation  String          @default("landscape") // landscape | portrait
+  slideCount   Int             @default(25)
+  audience     String          @default("manager")  // executive | manager | creative
+
+  // 各SGの出力（JSON文字列）
   sg01Output   String?                               // JSON: Sg01Output
   sg02Output   String?                               // JSON: Sg02Output
   sg03Output   String?                               // JSON: Sg03Output
   sg04Output   String?                               // JSON: Sg04Output
   sg05Output   String?                               // JSON: Sg05Output
-  sg06Output   String?                               // JSON: SgFinalOutput
+  sg06Output   String?                               // JSON: SgFinalOutput (旧)
+
+  // 最終出力
+  slidesJson   String?                               // JSON: Slide[]
+  pdfPath      String?                               // /proposals/{id}.pdf
+
+  // ステータス
+  status       String          @default("PENDING")  // PENDING | RUNNING | COMPLETED | ERROR
+  currentStep  String?                               // 現在実行中のSGエージェントID
   errorMessage String?
-  startedAt    DateTime        @default(now())
+  startedAt    DateTime?
   completedAt  DateTime?
+  createdAt    DateTime        @default(now())
 }
 
 // ── フィードバック ──

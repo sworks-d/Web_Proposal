@@ -41,7 +41,7 @@ export async function POST(
       data: {
         versionId,
         status: 'RUNNING',
-        params: JSON.stringify(sgParams ?? {}),
+        startedAt: new Date(),
       },
     })
   } else {
@@ -61,7 +61,7 @@ export async function POST(
     if (parsed) agOutputs[exec.agentId] = parsed
   }
 
-  const params_parsed: SgParams = safeParseJson(generation.params) ?? (sgParams as SgParams)
+  const params_parsed: SgParams = (sgParams as SgParams) ?? {}
 
   // バックグラウンドで実行（レスポンスは即時返す）
   runSgPipeline(
