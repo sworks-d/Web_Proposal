@@ -554,9 +554,9 @@ export function renderAG07CSlides(json: any): OutputSection[] {
   const sections: OutputSection[] = []
 
   for (const slide of slides) {
-    const catchOpts: any[] = slide.catchCopy_options ?? []
-    const bullets: string[] = slide.bullets ?? []
-    const evidence: any[] = slide.evidence ?? []
+    const catchOpts: any[] = Array.isArray(slide.catchCopy_options) ? slide.catchCopy_options : []
+    const bullets: string[] = Array.isArray(slide.bullets) ? slide.bullets : []
+    const evidence: any[] = Array.isArray(slide.evidence) ? slide.evidence : []
     const vs = slide.visual_spec
 
     const catchLines = catchOpts.map((c: any) =>

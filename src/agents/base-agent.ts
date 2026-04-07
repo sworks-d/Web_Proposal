@@ -64,18 +64,27 @@ export abstract class BaseAgent {
   }
 
   protected buildUserMessage(input: AgentInput): string {
+    const ctx = input.projectContext
+    const caseTypeLabel =
+      ctx.caseType === 'A' ? '新規サイト制作' :
+      ctx.caseType === 'B' ? 'リニューアル' :
+      ctx.caseType === 'C' ? '改善・運用' : '未設定'
     const lines = [
       '## 案件情報',
-      `クライアント名: ${input.projectContext.clientName}`,
-      `業種: ${input.projectContext.clientIndustry ?? '未設定'}`,
-      `業界タイプ: ${input.projectContext.industryType}`,
-      `\n依頼内容:\n${input.projectContext.briefText}`,
+      `クライアント名: ${ctx.clientName}`,
+      `業種: ${ctx.clientIndustry ?? '未設定'}`,
+      `業界タイプ: ${ctx.industryType}`,
+      `案件種別: ${caseTypeLabel}`,
     ]
-    if (input.projectContext.knownConstraints) {
-      lines.push(`\n制約条件:\n${input.projectContext.knownConstraints}`)
+    if (ctx.siteUrl) {
+      lines.push(`現在のサイトURL: ${ctx.siteUrl}`)
     }
-    if (input.projectContext.cdNotes) {
-      const note = input.projectContext.cdNotes[this.id]
+    lines.push(`\n依頼内容:\n${ctx.briefText}`)
+    if (ctx.knownConstraints) {
+      lines.push(`\n制約条件:\n${ctx.knownConstraints}`)
+    }
+    if (ctx.cdNotes) {
+      const note = ctx.cdNotes[this.id]
       if (note) {
         lines.push(`\n## CDからの補足情報（${this.id}向け）\n${note}`)
       }
