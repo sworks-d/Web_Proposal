@@ -63,13 +63,14 @@ const AGENT_TIMEOUTS: Record<string, number> = {
   'AG-01':            120_000,
   'AG-01-RESEARCH':   300_000,  // web_search最大20回 → 余裕を持って5分
   'AG-01-MERGE':      120_000,
-  'AG-02':            150_000,
-  'AG-02-STP':        150_000,
-  'AG-02-JOURNEY':    150_000,
-  'AG-02-VPC':        120_000,
-  'AG-02-POSITION':   120_000,
-  'AG-02-MERGE':      120_000,
-  'AG-02-VALIDATE':    90_000,  // 独自タイムアウト設定済みだが念のため
+  // AG-02系: 150秒 → 180秒に延長
+  'AG-02':            180_000,
+  'AG-02-STP':        180_000,
+  'AG-02-JOURNEY':    180_000,
+  'AG-02-VPC':        150_000,
+  'AG-02-POSITION':   150_000,
+  'AG-02-MERGE':      150_000,
+  'AG-02-VALIDATE':   120_000,
   'AG-03':            180_000,
   'AG-03-HEURISTIC':  180_000,
   'AG-03-HEURISTIC2': 180_000,

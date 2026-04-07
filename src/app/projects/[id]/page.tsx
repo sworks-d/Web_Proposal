@@ -138,6 +138,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
         setCurrentVersionId(active.id)
         if (active.status === 'CHECKPOINT') setAppStatus('checkpoint')
         else if (active.status === 'ERROR') { setAppStatus('error'); setErrorMessage('前回の実行でエラーが発生しました。') }
+        else if (active.status === 'RUNNING') { setAppStatus('error'); setErrorMessage('前回の実行が中断されました（タイムアウトまたはサーバー再起動）。停止したところから再開できます。') }
         else if (active.status === 'COMPLETED') setAppStatus('completed')
       }
     }).catch(() => {})
@@ -707,14 +708,14 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
               <div style={{ fontFamily: 'var(--font-d)', fontSize: '9px', fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', color: 'var(--red)', marginBottom: '6px' }}>エラー</div>
               <p style={{ fontFamily: 'var(--font-c)', fontSize: '13px', color: 'var(--ink2)', lineHeight: 1.6 }}>{errorMessage}</p>
               <div style={{ marginTop: '12px', display: 'flex', gap: '8px' }}>
-                {currentVersionId && effectiveCompletedAGs.length > 0 ? (
+                {currentVersionId && (
                   <button
                     onClick={handleCheckpointConfirm}
                     style={{ background: 'var(--ink)', color: 'var(--bg)', fontFamily: 'var(--font-d)', fontSize: '8px', fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', padding: '9px 18px', border: 'none', cursor: 'pointer', borderRadius: '2px' }}
                   >
-                    ↺ 失敗箇所から再開
+                    ↺ 停止箇所から再開
                   </button>
-                ) : null}
+                )}
                 <button
                   onClick={() => handleRestart()}
                   disabled={restarting}
@@ -757,6 +758,24 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
                     </span>
                   )
                 })}
+              </div>
+            </div>
+          )}
+
+          {/* CHECKPOINT再開カード（リロード後：checkpointStateなし） */}
+          {appStatus === 'checkpoint' && !checkpointState && currentVersionId && (
+            <div style={{ margin: '24px 40px', padding: '18px 22px', background: 'rgba(232,196,74,0.08)', border: '1px solid #E8C44A', borderRadius: '2px', flexShrink: 0 }}>
+              <div style={{ fontFamily: 'var(--font-d)', fontSize: '9px', fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', color: '#8A6800', marginBottom: '6px' }}>チェックポイント — 再開待ち</div>
+              <p style={{ fontFamily: 'var(--font-c)', fontSize: '13px', color: 'var(--ink2)', lineHeight: 1.6, margin: 0 }}>
+                前回の実行がチェックポイントで停止しています。下のボタンで次のフェーズに進めます。
+              </p>
+              <div style={{ marginTop: '12px', display: 'flex', gap: '8px' }}>
+                <button
+                  onClick={handleCheckpointConfirm}
+                  style={{ background: '#E8C44A', color: '#4A3800', fontFamily: 'var(--font-d)', fontSize: '8px', fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', padding: '9px 18px', border: 'none', cursor: 'pointer', borderRadius: '2px' }}
+                >
+                  次のフェーズへ →
+                </button>
               </div>
             </div>
           )}

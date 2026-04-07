@@ -3,41 +3,41 @@ import { callClaude, ModelType } from '@/lib/anthropic-client'
 import { safeParseJson } from '@/lib/json-cleaner'
 
 const AG_MAX_TOKENS: Record<string, number> = {
-  'AG-01': 4096,
+  // AG-01系
+  'AG-01':          4096,
   'AG-01-RESEARCH': 8192,
   'AG-01-MERGE':    4096,
-  // AG-02系（Haiku前提: 直接callClaudeするものは6000以下に制限）
-  'AG-02':          6000,
-  'AG-02-STP':      16384,  // callSection使用（per-call 6000）
-  'AG-02-JOURNEY':  16384,  // callSection使用（per-call 7000）
-  'AG-02-VPC':      16384,  // callSection使用（per-call 6000）
-  'AG-02-MERGE':    16384,  // callSection使用（per-call 6000）
-  'AG-02-POSITION': 16384,  // callSection使用（per-call 6000）
+  // AG-02系（16384 → 8192に削減）
+  'AG-02':          8192,
+  'AG-02-STP':      8192,
+  'AG-02-JOURNEY':  8192,
+  'AG-02-VPC':      8192,
+  'AG-02-MERGE':    8192,
+  'AG-02-POSITION': 8192,
   'AG-02-VALIDATE': 4096,
   // AG-03系
-  'AG-03':          16384,
-  'AG-03-HEURISTIC':  16384,
-  'AG-03-HEURISTIC2': 16384,
-  'AG-03-GAP':        16384,
-  'AG-03-DATA':       16384,
-  'AG-03-MERGE':      16384,
+  'AG-03':          8192,
+  'AG-03-DATA':     8192,
+  'AG-03-GAP':      8192,
+  'AG-03-HEURISTIC':  8192,
+  'AG-03-HEURISTIC2': 8192,
+  'AG-03-MERGE':    8192,
   // AG-04系
-  'AG-04':          4096,
-  'AG-04-MAIN':     16384,
-  'AG-04-INSIGHT':  16384,
-  'AG-04-MERGE':    16384,
-  // AG-05〜07
-  'AG-05': 16384,
-  'AG-06': 32768,
-  'AG-07': 16384,
-  'AG-07A': 16384,
-  'AG-07B': 16384,
-  'AG-07C': 16384,
-  // AG-07C分割
-  'AG-07C-1': 8192,
-  'AG-07C-2': 8192,
-  'AG-07C-3': 6144,
-  'AG-07C-4': 4096,
+  'AG-04':          4096,  // UNIFIED用
+  'AG-04-MAIN':     8192,
+  'AG-04-INSIGHT':  8192,
+  'AG-04-MERGE':    4096,
+  // AG-05以降
+  'AG-05':          4096,
+  'AG-06':          8192,
+  'AG-07':          8192,
+  'AG-07A':         8192,
+  'AG-07B':         8192,
+  'AG-07C':         8192,
+  'AG-07C-1':       8192,
+  'AG-07C-2':       8192,
+  'AG-07C-3':       8192,
+  'AG-07C-4':       8192,
 }
 
 
@@ -118,11 +118,52 @@ export abstract class BaseAgent {
   }
 
   protected parseJSON<T>(text: string): T {
-    const cleaned = text
+    // 1. コードフェンス除去
+    let cleaned = text
       .replace(/^\s*```json\s*/m, '')
       .replace(/^\s*```\s*/m, '')
       .replace(/\s*```\s*$/m, '')
       .trim()
-    return JSON.parse(cleaned) as T
+
+    // 2. JSONの開始位置を探す
+    const jsonStart = cleaned.search(/[\[{]/)
+    if (jsonStart === -1) {
+      throw new Error('JSON not found in response')
+    }
+    cleaned = cleaned.slice(jsonStart)
+
+    // 3. JSONの終了位置を探す
+    const lastBrace = cleaned.lastIndexOf('}')
+    const lastBracket = cleaned.lastIndexOf(']')
+    const jsonEnd = Math.max(lastBrace, lastBracket)
+    if (jsonEnd > 0) {
+      cleaned = cleaned.slice(0, jsonEnd + 1)
+    }
+
+    // 4. そのままパース
+    try {
+      return JSON.parse(cleaned) as T
+    } catch (e) {
+      // 5. 閉じカッコ補完を試みる
+      const openBraces = (cleaned.match(/{/g) || []).length
+      const closeBraces = (cleaned.match(/}/g) || []).length
+      const openBrackets = (cleaned.match(/\[/g) || []).length
+      const closeBrackets = (cleaned.match(/]/g) || []).length
+
+      let repaired = cleaned
+      for (let i = 0; i < openBrackets - closeBrackets; i++) {
+        repaired += ']'
+      }
+      for (let i = 0; i < openBraces - closeBraces; i++) {
+        repaired += '}'
+      }
+
+      try {
+        return JSON.parse(repaired) as T
+      } catch {
+        // 6. それでも失敗したら元のエラーを投げる
+        throw e
+      }
+    }
   }
 }
