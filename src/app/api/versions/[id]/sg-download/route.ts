@@ -16,13 +16,13 @@ export async function GET(
     orderBy: { startedAt: 'desc' },
   })
 
-  if (!sg || !sg.outputJson) {
+  if (!sg || !sg.sg06Output) {
     return new Response('No completed SG generation found', { status: 404 })
   }
 
   let output: SgFinalOutput
   try {
-    output = JSON.parse(sg.outputJson) as SgFinalOutput
+    output = JSON.parse(sg.sg06Output) as SgFinalOutput
   } catch {
     return new Response('Invalid SG output JSON', { status: 500 })
   }

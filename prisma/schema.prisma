@@ -113,15 +113,21 @@ model ProposalSlide {
 
 // ── 提案書生成（SG pipeline）──
 model SgGeneration {
-  id          String          @id @default(cuid())
-  versionId   String
-  version     ProposalVersion @relation(fields: [versionId], references: [id])
-  status      String          @default("RUNNING")  // RUNNING | COMPLETED | ERROR
-  params      String          @default("{}")        // JSON: SgParams
-  outputJson  String          @default("")          // JSON: SgFinalOutput
+  id           String          @id @default(cuid())
+  versionId    String
+  version      ProposalVersion @relation(fields: [versionId], references: [id])
+  status       String          @default("RUNNING")  // RUNNING | COMPLETED | ERROR
+  currentStep  String?                               // 現在実行中のSGエージェントID
+  params       String          @default("{}")        // JSON: SgParams
+  sg01Output   String?                               // JSON: Sg01Output
+  sg02Output   String?                               // JSON: Sg02Output
+  sg03Output   String?                               // JSON: Sg03Output
+  sg04Output   String?                               // JSON: Sg04Output
+  sg05Output   String?                               // JSON: Sg05Output
+  sg06Output   String?                               // JSON: SgFinalOutput
   errorMessage String?
-  startedAt   DateTime        @default(now())
-  completedAt DateTime?
+  startedAt    DateTime        @default(now())
+  completedAt  DateTime?
 }
 
 // ── フィードバック ──

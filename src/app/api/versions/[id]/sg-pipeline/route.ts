@@ -13,7 +13,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id: versionId } = await params
-  const { params: sgParams } = await req.json() as { params: SgParams }
+  const { params: sgParams, resumeFrom } = await req.json() as { params?: SgParams; resumeFrom?: string }
 
   const version = await prisma.proposalVersion.findUnique({
     where: { id: versionId },
@@ -29,7 +29,30 @@ export async function POST(
 
   if (!version) return new Response('Version not found', { status: 404 })
 
-  // Collect AG outputs
+  // 既存のエラー/実行中 generation を再利用、なければ新規作成
+  let generation = await prisma.sgGeneration.findFirst({
+    where: { versionId, status: { not: 'COMPLETED' } },
+    orderBy: { startedAt: 'desc' },
+  })
+
+  if (!generation || sgParams) {
+    // 新規パラメータ指定 or 存在しない場合は新規作成
+    generation = await prisma.sgGeneration.create({
+      data: {
+        versionId,
+        status: 'RUNNING',
+        params: JSON.stringify(sgParams ?? {}),
+      },
+    })
+  } else {
+    // 既存を再開状態にリセット
+    generation = await prisma.sgGeneration.update({
+      where: { id: generation.id },
+      data: { status: 'RUNNING', errorMessage: null, currentStep: resumeFrom ?? null },
+    })
+  }
+
+  // AG出力を収集
   const agOutputs: Record<string, unknown> = {}
   for (const exec of version.executions) {
     const result = exec.results[0]
@@ -38,65 +61,18 @@ export async function POST(
     if (parsed) agOutputs[exec.agentId] = parsed
   }
 
-  // Create SG generation record
-  const sg = await prisma.sgGeneration.create({
-    data: {
-      versionId,
-      status: 'RUNNING',
-      params: JSON.stringify(sgParams),
-    },
-  })
+  const params_parsed: SgParams = safeParseJson(generation.params) ?? (sgParams as SgParams)
 
-  const encoder = new TextEncoder()
-  const stream = new ReadableStream({
-    async start(controller) {
-      const send = (data: unknown) =>
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`))
+  // バックグラウンドで実行（レスポンスは即時返す）
+  runSgPipeline(
+    generation.id,
+    version.project.client.name,
+    version.project.briefText,
+    agOutputs,
+    params_parsed,
+  ).catch(err => console.error('SG pipeline error:', err))
 
-      try {
-        send({ type: 'status', message: 'SGパイプライン開始...' })
-
-        const result = await runSgPipeline(
-          version.project.client.name,
-          version.project.briefText,
-          agOutputs,
-          sgParams,
-          (stepId, name) => {
-            send({ type: 'step', agentId: stepId, name, message: `${stepId} ${name} 実行中...` })
-          },
-        )
-
-        // Save to DB
-        await prisma.sgGeneration.update({
-          where: { id: sg.id },
-          data: {
-            status: 'COMPLETED',
-            outputJson: JSON.stringify(result.finalOutput),
-            completedAt: new Date(),
-          },
-        })
-
-        send({ type: 'complete', sgId: sg.id, output: result.finalOutput })
-      } catch (err) {
-        const message = err instanceof Error ? err.message : 'Unknown error'
-        await prisma.sgGeneration.update({
-          where: { id: sg.id },
-          data: { status: 'ERROR', errorMessage: message, completedAt: new Date() },
-        }).catch(() => {})
-        send({ type: 'error', message })
-      } finally {
-        controller.close()
-      }
-    },
-  })
-
-  return new Response(stream, {
-    headers: {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
-      'Connection': 'keep-alive',
-    },
-  })
+  return Response.json({ generationId: generation.id })
 }
 
 export async function GET(

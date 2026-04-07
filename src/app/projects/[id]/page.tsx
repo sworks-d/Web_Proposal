@@ -8,7 +8,7 @@ import TableOfContents from '@/components/proposal/TableOfContents'
 import { FeedbackModal } from '@/components/feedback/FeedbackModal'
 import { OutputPanel, VersionExecution } from '@/components/pipeline/OutputPanel'
 import { ExecutionStats } from '@/components/pipeline/ExecutionStats'
-import { SlideGeneratorPanel } from '@/components/slides/SlideGeneratorPanel'
+import { useRouter } from 'next/navigation'
 
 interface FullVersion {
   id: string
@@ -125,7 +125,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
   const [showVersionDropdown, setShowVersionDropdown] = useState(false)
   const [showSlides, setShowSlides] = useState(false)
   const [showFeedback, setShowFeedback] = useState(false)
-  const [showSgPanel, setShowSgPanel] = useState(false)
+  const router = useRouter()
   const [feedbackDone, setFeedbackDone] = useState(false)
   const [agentStatuses, setAgentStatuses] = useState<Record<string, 'running' | 'completed' | 'failed' | 'skipped'>>({})
   const [restarting, setRestarting] = useState(false)
@@ -702,7 +702,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
             {currentVersionId && appStatus === 'completed' && (
               <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
                 <button
-                  onClick={() => setShowSgPanel(true)}
+                  onClick={() => router.push(`/projects/${id}/slides`)}
                   style={{ background: 'var(--red)', color: '#fff', fontFamily: 'var(--font-d)', fontSize: '8px', fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', padding: '8px 16px', border: 'none', cursor: 'pointer', borderRadius: '2px' }}
                 >
                   提案書を作成する →
@@ -874,13 +874,6 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
         />
       )}
 
-      {/* Slide Generator Panel */}
-      {showSgPanel && currentVersionId && (
-        <SlideGeneratorPanel
-          versionId={currentVersionId}
-          onClose={() => setShowSgPanel(false)}
-        />
-      )}
     </div>
   )
 }
