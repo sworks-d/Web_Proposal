@@ -91,17 +91,50 @@ export abstract class BaseAgent {
     }
     if (input.previousOutputs.length > 0) {
       lines.push('\n## 前エージェントの出力サマリー')
-      let remaining = 500
+      
+      // エージェントごとに適切な上限を設定（重要な前段AGは多く渡す）
+      const limits: Record<string, number> = {
+        'AG-01': 3000,
+        'AG-01-RESEARCH': 2000,
+        'AG-01-MERGE': 4000,
+        'AG-02': 4000,
+        'AG-02-JOURNEY': 3000,
+        'AG-02-STP': 3000,
+        'AG-02-VPC': 3000,
+        'AG-02-POSITION': 3000,
+        'AG-02-MERGE': 5000,
+        'AG-03': 3000,
+        'AG-03-DATA': 3000,
+        'AG-03-GAP': 3000,
+        'AG-03-HEURISTIC': 3000,
+        'AG-03-HEURISTIC2': 3000,
+        'AG-03-MERGE': 5000,
+        'AG-04': 4000,
+        'AG-04-INSIGHT': 4000,
+        'AG-04-MERGE': 5000,
+        'AG-05': 3000,
+      }
+      
       for (const prev of input.previousOutputs) {
-        if (remaining <= 0) break
+        const limit = limits[prev.agentId] ?? 2000
+        let remaining = limit
+        
         lines.push(`\n### ${prev.agentId}`)
-        for (const s of prev.sections.slice(0, 3)) {
+        for (const s of prev.sections) {
           if (remaining <= 0) break
           const chunk = s.content.slice(0, remaining)
           lines.push(`**${s.title}**\n${chunk}`)
           remaining -= chunk.length
         }
       }
+    }
+    // 差し戻し指示（最優先）
+    if (input.rerunInstruction) {
+      lines.push('\n' + '═'.repeat(50))
+      lines.push('⚠️ 再実行指示（最優先で対応してください）')
+      lines.push('═'.repeat(50))
+      lines.push(input.rerunInstruction)
+      lines.push('═'.repeat(50))
     }
     if (input.userInstruction) {
       lines.push(`\n## 追加指示\n${input.userInstruction}`)

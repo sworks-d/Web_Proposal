@@ -56,6 +56,7 @@ export interface AgentInput {
   projectContext: ProjectContext
   previousOutputs: AgentOutput[]
   userInstruction?: string
+  rerunInstruction?: string  // 差し戻し指示
   executionMode?: ExecutionMode
 }
 
