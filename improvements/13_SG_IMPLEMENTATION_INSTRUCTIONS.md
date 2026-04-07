@@ -107,6 +107,10 @@ export const VARIANT_DEFAULT_NARRATIVE: Record<ProposalVariant, NarrativeType> =
   spot: 'solution',
 }
 
+// 重点章のページ配分ルール
+// 選択した章は +60% のページ割り当て
+export const FOCUS_CHAPTER_MULTIPLIER = 1.6
+
 // スポット対象の選択肢
 export const SPOT_TARGET_OPTIONS = [
   { value: 'top', label: 'TOPページ', agSources: ['AG-07C-1', 'AG-02-STP', 'AG-04-INSIGHT'] },
@@ -569,13 +573,14 @@ export function renderSlides(
   const size = orientation === 'landscape' ? A4_LANDSCAPE : A4_PORTRAIT
   const { width, height } = size
 
-  const slidesHtml = slides.map((slide, i) => renderSlide(slide, theme, width, height)).join('\n')
+  const slidesHtml = slides.map((slide, i) => renderSlide(slide, theme, width, height, i)).join('\n')
 
   return `
 <!DOCTYPE html>
 <html>
 <head>
   <meta charset="UTF-8">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700&display=swap');
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -599,19 +604,57 @@ export function renderSlides(
     .body { font-size: ${theme.bodySize}; line-height: 1.75; }
     .split { display: flex; gap: 40px; height: calc(100% - 80px); }
     .split-left, .split-right { flex: 1; }
-    .blocks { display: flex; flex-direction: column; gap: 16px; }
-    .block { background: ${theme.bgAlt}; padding: 16px; border-radius: 8px; }
-    .block-title { font-weight: 700; font-size: 12px; color: ${theme.accent}; margin-bottom: 8px; text-transform: uppercase; }
+    
+    /* 表スタイル */
+    .data-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+    }
+    .data-table th, .data-table td {
+      padding: 12px 16px;
+      text-align: left;
+      border-bottom: 1px solid ${theme.bgAlt};
+    }
+    .data-table th {
+      background: ${theme.bgAlt};
+      font-weight: 700;
+      color: ${theme.accent};
+    }
+    .data-table tr:hover {
+      background: ${theme.bgAlt};
+    }
+    
+    /* プレースホルダー */
+    .placeholder-box {
+      background: ${theme.bgAlt};
+      border: 2px dashed ${theme.textSub};
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: ${theme.textSub};
+      font-size: 14px;
+      text-align: center;
+      padding: 24px;
+    }
   </style>
 </head>
 <body>
 ${slidesHtml}
+<script>
+  // chart.jsの初期化はスライドごとに行う
+  document.querySelectorAll('[data-chart]').forEach(canvas => {
+    const config = JSON.parse(canvas.dataset.chart);
+    new Chart(canvas, config);
+  });
+</script>
 </body>
 </html>
 `
 }
 
-function renderSlide(slide: Slide, theme: Theme, width: number, height: number): string {
+function renderSlide(slide: Slide, theme: Theme, width: number, height: number, index: number): string {
   switch (slide.type) {
     case 'cover':
       return renderCover(slide, theme)
@@ -620,12 +663,51 @@ function renderSlide(slide: Slide, theme: Theme, width: number, height: number):
     case 'text-only':
       return renderTextOnly(slide, theme)
     case 'text-visual-split':
-      return renderTextVisualSplit(slide, theme)
+      return renderTextVisualSplit(slide, theme, index)
     case 'wireframe-detail':
       return renderWireframeDetail(slide, theme)
+    case 'comparison-table':
+      return renderComparisonTable(slide, theme)
+    case 'chart':
+      return renderChart(slide, theme, index)
     default:
       return renderTextOnly(slide, theme) // フォールバック
   }
+}
+
+// 比較表テンプレート
+function renderComparisonTable(slide: Slide, theme: Theme): string {
+  const { headline, visual } = slide
+  const tableData = visual?.data as { headers: string[], rows: string[][] }
+  
+  return `
+  <div class="slide">
+    <h2 class="headline">${headline}</h2>
+    <table class="data-table">
+      <thead>
+        <tr>${tableData.headers.map(h => `<th>${h}</th>`).join('')}</tr>
+      </thead>
+      <tbody>
+        ${tableData.rows.map(row => `<tr>${row.map(cell => `<td>${cell}</td>`).join('')}</tr>`).join('')}
+      </tbody>
+    </table>
+  </div>
+  `
+}
+
+// グラフテンプレート
+function renderChart(slide: Slide, theme: Theme, index: number): string {
+  const { headline, visual } = slide
+  const chartConfig = JSON.stringify(visual?.data)
+  
+  return `
+  <div class="slide">
+    <h2 class="headline">${headline}</h2>
+    <div style="height: calc(100% - 100px); display: flex; align-items: center; justify-content: center;">
+      <canvas id="chart-${index}" data-chart='${chartConfig}' style="max-width: 100%; max-height: 100%;"></canvas>
+    </div>
+  </div>
+  `
 }
 
 // 各テンプレートの実装...

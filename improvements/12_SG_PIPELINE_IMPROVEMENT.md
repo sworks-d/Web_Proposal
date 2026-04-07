@@ -869,42 +869,66 @@ type LayoutType =
 ## SG-06: ビジュアル生成
 
 **モデル**: Sonnet
-**役割**: SVG/HTMLでビジュアルを実生成
+**役割**: 表・グラフ・シンプルな図をHTML/SVGで生成
 
-### 生成タイプ
+### 生成するもの
 
-| タイプ | 入力 | 出力 |
+| タイプ | 方法 | 用途 |
 |---|---|---|
-| `wireframe` | コンポーネント配列 | SVG |
-| `flow` | ノード + エッジ | SVG |
-| `table` | 行列データ | HTML table |
-| `matrix` | 軸 + プロット | SVG |
-| `chart` | 数値配列 | SVG |
-| `number` | 数値 + ラベル | SVG |
+| 比較表・一覧表 | HTML table | セグメント比較、競合比較、機能比較 |
+| 棒グラフ | chart.js (bar) | 数値比較、推移 |
+| 円グラフ | chart.js (pie/doughnut) | 構成比 |
+| 線グラフ | chart.js (line) | トレンド、推移 |
+| 2x2マトリクス | SVG | ポジショニング |
+| フロー図（3-5ステップ） | SVG | ジャーニー、プロセス |
 
-### ワイヤーフレーム生成例
+### 生成しないもの（プレースホルダー + 指示で出力）
 
-```svg
-<svg viewBox="0 0 300 500" xmlns="http://www.w3.org/2000/svg">
-  <!-- Header -->
-  <rect x="0" y="0" width="300" height="32" fill="#f5f5f5" stroke="#e0e0e0"/>
-  <text x="12" y="20" font-size="9" fill="#666">ロゴ / ナビ / CTA</text>
-  
-  <!-- Hero -->
-  <rect x="8" y="40" width="284" height="80" fill="#e8e8e8" rx="4"/>
-  <text x="20" y="75" font-size="11" fill="#333">FV: コピー & 2大CTA</text>
-  
-  <!-- CTA Row -->
-  <rect x="16" y="100" width="80" height="24" rx="2" fill="#333"/>
-  <text x="28" y="116" font-size="8" fill="#fff">職種から探す</text>
-  <rect x="104" y="100" width="70" height="24" rx="2" fill="none" stroke="#333"/>
-  <text x="116" y="116" font-size="8" fill="#333">面談予約</text>
-  
-  <!-- 3 Column Grid -->
-  <rect x="8" y="136" width="92" height="50" fill="#f0f0f0" rx="4"/>
-  <rect x="104" y="136" width="92" height="50" fill="#f0f0f0" rx="4"/>
-  <rect x="200" y="136" width="92" height="50" fill="#f0f0f0" rx="4"/>
-</svg>
+| タイプ | 出力形式 |
+|---|---|
+| ワイヤーフレーム | グレーボックス + 「CDが作成: 〇〇」テキスト |
+| 複雑な図解 | プレースホルダー + 指示テキスト |
+| イラスト・写真 | プレースホルダーのみ |
+
+### chart.js使用例
+
+```html
+<canvas id="chart-slide-8"></canvas>
+<script>
+new Chart(document.getElementById('chart-slide-8'), {
+  type: 'bar',
+  data: {
+    labels: ['競合A', '競合B', '競合C', '自社'],
+    datasets: [{
+      label: 'コンテンツ充実度',
+      data: [85, 72, 68, 45],
+      backgroundColor: ['#999', '#999', '#999', '#0071E3']
+    }]
+  },
+  options: {
+    plugins: { legend: { display: false } },
+    scales: { y: { beginAtZero: true, max: 100 } }
+  }
+});
+</script>
+```
+
+### ワイヤーフレームのプレースホルダー例
+
+```html
+<div class="wireframe-placeholder">
+  <div class="placeholder-box" style="background: #f0f0f0; height: 300px; display: flex; align-items: center; justify-content: center;">
+    <div style="text-align: center; color: #666;">
+      <div style="font-size: 14px; font-weight: bold;">TOPページ ワイヤーフレーム</div>
+      <div style="font-size: 12px; margin-top: 8px;">
+        CDが作成<br>
+        ・FV: コピー + 2大CTA<br>
+        ・職種検索モジュール<br>
+        ・社員インタビュー3名
+      </div>
+    </div>
+  </div>
+</div>
 ```
 
 ---
