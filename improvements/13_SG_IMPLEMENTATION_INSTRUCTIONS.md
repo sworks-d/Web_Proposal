@@ -28,6 +28,10 @@ model SgGeneration {
   versionId    String
   version      ProposalVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
   
+  // 識別用
+  name         String?  // 提案書名（例: "経営層向け戦略提案"）
+  targetScope  String?  // スポット型の対象（例: "TOPページ", "CVフロー"）
+  
   // パラメータ
   variant      String   // full | strategy | analysis | content | spot（種別）
   narrativeType String  // insight | data | vision | solution（型）
@@ -102,6 +106,16 @@ export const VARIANT_DEFAULT_NARRATIVE: Record<ProposalVariant, NarrativeType> =
   content: 'solution',
   spot: 'solution',
 }
+
+// スポット対象の選択肢
+export const SPOT_TARGET_OPTIONS = [
+  { value: 'top', label: 'TOPページ', agSources: ['AG-07C-1', 'AG-02-STP', 'AG-04-INSIGHT'] },
+  { value: 'list', label: '一覧ページ', agSources: ['AG-07C-2', 'AG-02-JOURNEY'] },
+  { value: 'detail', label: '詳細ページ', agSources: ['AG-07C-3', 'AG-02-JOURNEY'] },
+  { value: 'cv-flow', label: 'CVフロー', agSources: ['AG-07C-4', 'AG-04-INSIGHT'] },
+  { value: 'navigation', label: 'ナビゲーション', agSources: ['AG-07C-1', 'AG-02-JOURNEY'] },
+  { value: 'other', label: 'その他', agSources: [] }, // 自由入力、全AGソース使用
+]
 
 // スライドの役割
 export type SlideRole = 
@@ -420,7 +434,9 @@ import { Sg01Output, Sg02Output, Sg04Output, Slide, ProposalVariant, NarrativeTy
 
 interface SgPipelineInput {
   versionId: string
+  name?: string                      // 提案書名（任意）
   variant: ProposalVariant           // 種別: full | strategy | analysis | content | spot
+  targetScope?: string               // スポット型の対象（例: "TOPページ"）
   narrativeType?: NarrativeType      // 型: 指定なしなら種別に応じて自動選択
   tone: 'simple' | 'rich' | 'pop'
   orientation: 'landscape' | 'portrait'
@@ -437,6 +453,8 @@ export async function runSgPipeline(input: SgPipelineInput): Promise<string> {
   const sg = await prisma.sgGeneration.create({
     data: {
       versionId: input.versionId,
+      name: input.name,
+      targetScope: input.targetScope,
       variant: input.variant,
       narrativeType: narrativeType,
       tone: input.tone,
@@ -674,7 +692,9 @@ export async function POST(req: Request) {
   
   const sgId = await runSgPipeline({
     versionId: body.versionId,
+    name: body.name,                           // 提案書名（任意）
     variant: body.variant || 'full',           // 種別（必須）
+    targetScope: body.targetScope,             // スポット対象（spot時のみ）
     narrativeType: body.narrativeType,         // 型（省略可、自動選択）
     tone: body.tone || 'simple',
     orientation: body.orientation || 'landscape',
@@ -684,6 +704,46 @@ export async function POST(req: Request) {
   })
   
   return NextResponse.json({ sgId })
+}
+```
+
+### 10. 提案書一覧API
+
+`src/app/api/sg/list/route.ts`:
+
+```typescript
+import { NextResponse } from 'next/server'
+import { prisma } from '@/lib/prisma'
+
+export async function GET(req: Request) {
+  const { searchParams } = new URL(req.url)
+  const versionId = searchParams.get('versionId')
+  
+  if (!versionId) {
+    return NextResponse.json({ error: 'versionId required' }, { status: 400 })
+  }
+  
+  const proposals = await prisma.sgGeneration.findMany({
+    where: { versionId },
+    orderBy: { createdAt: 'desc' },
+    select: {
+      id: true,
+      name: true,
+      variant: true,
+      targetScope: true,
+      narrativeType: true,
+      tone: true,
+      slideCount: true,
+      audience: true,
+      status: true,
+      currentStep: true,
+      pdfPath: true,
+      createdAt: true,
+      completedAt: true,
+    },
+  })
+  
+  return NextResponse.json({ proposals })
 }
 ```
 
