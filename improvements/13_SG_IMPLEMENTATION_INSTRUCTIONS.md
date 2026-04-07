@@ -536,14 +536,20 @@ Phase 1では3種のテンプレートを実装:
 ```typescript
 import { Slide, Theme, THEMES, ToneType } from './types'
 
+// A4サイズ（ピクセル @96dpi）
+// 横: 1123px × 794px
+// 縦: 794px × 1123px
+const A4_LANDSCAPE = { width: 1123, height: 794 }
+const A4_PORTRAIT = { width: 794, height: 1123 }
+
 export function renderSlides(
   slides: Slide[],
   tone: ToneType,
   orientation: 'landscape' | 'portrait'
 ): string {
   const theme = THEMES[tone]
-  const width = orientation === 'landscape' ? 960 : 540
-  const height = orientation === 'landscape' ? 540 : 960
+  const size = orientation === 'landscape' ? A4_LANDSCAPE : A4_PORTRAIT
+  const { width, height } = size
 
   const slidesHtml = slides.map((slide, i) => renderSlide(slide, theme, width, height)).join('\n')
 
@@ -564,6 +570,7 @@ export function renderSlides(
       color: ${theme.text};
       page-break-after: always;
       position: relative;
+      overflow: hidden;
     }
     .headline {
       font-family: ${theme.fontTitle};
@@ -617,7 +624,15 @@ import puppeteer from 'puppeteer'
 import fs from 'fs/promises'
 import path from 'path'
 
-export async function generatePdf(html: string, sgId: string): Promise<string> {
+// A4サイズ（mm）
+// 横: 297mm × 210mm
+// 縦: 210mm × 297mm
+
+export async function generatePdf(
+  html: string, 
+  sgId: string,
+  orientation: 'landscape' | 'portrait'
+): Promise<string> {
   const browser = await puppeteer.launch({ headless: true })
   const page = await browser.newPage()
   
@@ -630,8 +645,8 @@ export async function generatePdf(html: string, sgId: string): Promise<string> {
   
   await page.pdf({
     path: pdfPath,
-    width: '960px',
-    height: '540px',
+    format: 'A4',
+    landscape: orientation === 'landscape',
     printBackground: true,
     margin: { top: 0, right: 0, bottom: 0, left: 0 },
   })
