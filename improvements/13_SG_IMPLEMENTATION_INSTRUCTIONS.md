@@ -29,11 +29,13 @@ model SgGeneration {
   version      ProposalVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
   
   // パラメータ
-  proposalType String   // insight | data | vision | solution
+  variant      String   // full | strategy | analysis | content | spot（種別）
+  narrativeType String  // insight | data | vision | solution（型）
   tone         String   // simple | rich | pop
   orientation  String   // landscape | portrait
   slideCount   Int
   audience     String   // executive | manager | creative
+  focusChapters String? // 重点章（JSON配列）
   
   // 各SGの出力（JSON文字列）
   sg01Output   String?
@@ -74,11 +76,32 @@ model ProposalVersion {
 `src/lib/sg/types.ts` を作成:
 
 ```typescript
-// 提案書の型（4種）
-export type ProposalType = 'insight' | 'data' | 'vision' | 'solution'
+// 種別（何を出力するか）
+export type ProposalVariant = 'full' | 'strategy' | 'analysis' | 'content' | 'spot'
+
+// 型（どう伝えるか）
+export type NarrativeType = 'insight' | 'data' | 'vision' | 'solution'
 
 // トーン（3種）
 export type ToneType = 'simple' | 'rich' | 'pop'
+
+// 種別ごとのデフォルト章構成
+export const VARIANT_CHAPTERS: Record<ProposalVariant, string[]> = {
+  full: ['課題', '分析', 'ターゲット', 'ジャーニー', 'コンセプト', '設計', 'IA', 'コンテンツ', 'KPI'],
+  strategy: ['課題', 'ターゲット', 'インサイト', 'コンセプト', '実現イメージ'],
+  analysis: ['現状分析', '競合分析', 'ユーザー行動', '課題構造', '方向性'],
+  content: ['コンテンツ課題', 'ターゲット×コンテンツ', '戦略', 'サイトマップ', 'ページ設計'],
+  spot: ['問題点', '課題優先順位', '施策一覧', '施策詳細', '期待効果'],
+}
+
+// 種別ごとのデフォルト型
+export const VARIANT_DEFAULT_NARRATIVE: Record<ProposalVariant, NarrativeType> = {
+  full: 'insight',
+  strategy: 'insight',
+  analysis: 'data',
+  content: 'solution',
+  spot: 'solution',
+}
 
 // スライドの役割
 export type SlideRole = 
@@ -393,27 +416,34 @@ for (const chapter of sg01Output.chapters) {
 ```typescript
 import { prisma } from '@/lib/prisma'
 import { callAgent } from '@/lib/agent-runner'
-import { Sg01Output, Sg02Output, Sg04Output, Slide } from './types'
+import { Sg01Output, Sg02Output, Sg04Output, Slide, ProposalVariant, NarrativeType, VARIANT_DEFAULT_NARRATIVE } from './types'
 
 interface SgPipelineInput {
   versionId: string
-  proposalType?: string  // 自動選択させる場合はnull
+  variant: ProposalVariant           // 種別: full | strategy | analysis | content | spot
+  narrativeType?: NarrativeType      // 型: 指定なしなら種別に応じて自動選択
   tone: 'simple' | 'rich' | 'pop'
   orientation: 'landscape' | 'portrait'
   slideCount: number
   audience: 'executive' | 'manager' | 'creative'
+  focusChapters?: string[]           // 重点章
 }
 
 export async function runSgPipeline(input: SgPipelineInput): Promise<string> {
+  // 型の自動選択
+  const narrativeType = input.narrativeType || VARIANT_DEFAULT_NARRATIVE[input.variant]
+  
   // 1. SgGeneration作成
   const sg = await prisma.sgGeneration.create({
     data: {
       versionId: input.versionId,
-      proposalType: input.proposalType || 'auto',
+      variant: input.variant,
+      narrativeType: narrativeType,
       tone: input.tone,
       orientation: input.orientation,
       slideCount: input.slideCount,
       audience: input.audience,
+      focusChapters: input.focusChapters ? JSON.stringify(input.focusChapters) : null,
       status: 'RUNNING',
       startedAt: new Date(),
     },
@@ -629,11 +659,13 @@ export async function POST(req: Request) {
   
   const sgId = await runSgPipeline({
     versionId: body.versionId,
-    proposalType: body.proposalType,
+    variant: body.variant || 'full',           // 種別（必須）
+    narrativeType: body.narrativeType,         // 型（省略可、自動選択）
     tone: body.tone || 'simple',
     orientation: body.orientation || 'landscape',
     slideCount: body.slideCount || 25,
     audience: body.audience || 'manager',
+    focusChapters: body.focusChapters,         // 重点章（省略可）
   })
   
   return NextResponse.json({ sgId })
