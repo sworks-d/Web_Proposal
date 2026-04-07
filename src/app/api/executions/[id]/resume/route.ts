@@ -86,8 +86,9 @@ export async function POST(
     .filter(id => prevOutputMap[id])
     .map(id => prevOutputMap[id])
 
-  // phase判定（0=AG-01系, 1=AG-02/03系, 2=AG-04系, 3=AG-06/07系）
-  const phase = completedAgIds.includes('AG-05') ? 3
+  // phase判定（0=AG-01系, 1=AG-02/03系, 2=AG-04系, 3=AG-06/07系, 4=完了）
+  const phase = completedAgIds.includes('AG-07C-4') ? 4
+    : completedAgIds.includes('AG-05') ? 3
     : completedAgIds.includes('AG-03-MERGE') ? 2
     : completedAgIds.includes('AG-01-MERGE') ? 1
     : 0
@@ -369,6 +370,14 @@ export async function POST(
           await feedbackCheck('AG-07C-4', 'AG-07C-4 サマリー', fb07cNote)
 
           await setVersionStatus(versionId, 'COMPLETED')
+          send({ type: 'checkpoint', versionId, phase: 4, outputs: newOutputs })
+          send({ type: 'pipeline_complete', versionId })
+
+        // ────────────────────────────────────────────
+        // Phase 4: 既に完了済み
+        // ────────────────────────────────────────────
+        } else if (phase === 4) {
+          send({ type: 'status', message: 'パイプラインは既に完了しています' })
           send({ type: 'checkpoint', versionId, phase: 4, outputs: newOutputs })
           send({ type: 'pipeline_complete', versionId })
         }
