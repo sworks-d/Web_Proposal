@@ -13,12 +13,11 @@ export function getModel(type: ModelType = 'fast'): string {
 export interface ClaudeCallOptions {
   modelType?: ModelType
   maxTokens?: number
+  enableWebSearch?: boolean
 }
 
-const CONTINUATION_PROMPT = '前回の続きをそのまま出力してください。前置き・説明・重複は不要です。'
-
 // 後方互換: positional (system, user, modelType, maxTokens) と
-//           options object (system, user, { modelType, maxTokens, enableWebSearch }) の両形式に対応
+//           options object (system, user, { modelType, maxTokens }) の両形式に対応
 export async function callClaude(
   system: string,
   user: string,
@@ -28,12 +27,14 @@ export async function callClaude(
   let modelType: ModelType
   let maxTokens: number | undefined
 
+  let enableWebSearch = false
   if (typeof modelTypeOrOptions === 'string') {
     modelType = modelTypeOrOptions
     maxTokens = maxTokensLegacy
   } else {
     modelType = modelTypeOrOptions.modelType ?? 'fast'
     maxTokens = modelTypeOrOptions.maxTokens
+    enableWebSearch = modelTypeOrOptions.enableWebSearch ?? false
   }
 
   const defaultMax = modelType === 'quality' ? 8192 : 4096
@@ -41,26 +42,25 @@ export async function callClaude(
 
   type Msg = { role: 'user' | 'assistant'; content: string }
   const messages: Msg[] = [{ role: 'user', content: user }]
-  let fullText = ''
+  let fullText: string
 
-  // ツールなし: max_tokens に達した場合は続きを要求（最大4ターン）
-  for (let i = 0; i < 4; i++) {
-    const res = await anthropic.messages.create({
-      model: getModel(modelType),
-      max_tokens: limit,
-      system,
-      messages,
-    })
-    const block = res.content.find(b => b.type === 'text')
-    if (!block || block.type !== 'text') throw new Error('Unexpected response type')
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const tools: any[] | undefined = enableWebSearch
+    ? [{ type: 'web_search_20260209', name: 'web_search', max_uses: 10, allowed_callers: ['direct'] }]
+    : undefined
 
-    fullText += block.text
-
-    if (res.stop_reason !== 'max_tokens') break
-
-    messages.push({ role: 'assistant', content: block.text })
-    messages.push({ role: 'user', content: CONTINUATION_PROMPT })
-  }
+  const stream = await anthropic.messages.stream({
+    model: getModel(modelType),
+    max_tokens: limit,
+    system,
+    messages,
+    ...(tools ? { tools } : {}),
+  })
+  const res = await stream.finalMessage()
+  fullText = res.content
+    .filter(b => b.type === 'text')
+    .map(b => (b as { type: 'text'; text: string }).text)
+    .join('')
 
   return fullText
 }

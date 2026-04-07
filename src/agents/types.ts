@@ -50,10 +50,13 @@ export interface OutputMetadata {
   missingInfo: string[]
 }
 
+export type ExecutionMode = 'precision' | 'standard'
+
 export interface AgentInput {
   projectContext: ProjectContext
   previousOutputs: AgentOutput[]
   userInstruction?: string
+  executionMode?: ExecutionMode
 }
 
 export interface AgentOutput {
@@ -125,6 +128,7 @@ export interface PipelineConfig {
   subAgents: SubAgentId[]
   secondaryAgent?: PrimaryAgentId
   startFrom?: AgentId
+  executionMode?: ExecutionMode
 }
 
 export type AgentSelection = {

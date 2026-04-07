@@ -24,6 +24,7 @@ import { Ag03GapAgent } from '@/agents/ag-03-gap'
 import { Ag03HeuristicAgent } from '@/agents/ag-03-heuristic'
 import { Ag03Heuristic2Agent } from '@/agents/ag-03-heuristic2'
 import { Ag03MergeAgent } from '@/agents/ag-03-merge'
+import { Ag04UnifiedAgent } from '@/agents/ag-04-unified'
 import { Ag04InsightAgent } from '@/agents/ag-04-insight'
 import { Ag04MainAgent } from '@/agents/ag-04-main'
 import { Ag04MergeAgent } from '@/agents/ag-04-merge'
@@ -75,7 +76,7 @@ const AGENT_TIMEOUTS: Record<string, number> = {
   'AG-03-GAP':        150_000,
   'AG-03-DATA':       120_000,
   'AG-03-MERGE':      120_000,
-  'AG-04':            150_000,
+  'AG-04':             60_000,
   'AG-04-MAIN':       150_000,
   'AG-04-INSIGHT':    150_000,
   'AG-04-MERGE':      120_000,
@@ -93,7 +94,6 @@ const AGENT_TIMEOUTS: Record<string, number> = {
 
 const FORBIDDEN_REUSE: Record<string, string[]> = {
   'AG-03-MERGE': ['siteDesignPrinciples'],
-  'AG-04-MERGE': ['siteDesignPrinciples', 'coreProblemStatement'],
   'AG-07A':      ['siteDesignPrinciples'],
   'AG-07C-1': [], 'AG-07C-2': [], 'AG-07C-3': [], 'AG-07C-4': [],
 }
@@ -160,9 +160,9 @@ export async function runAgentStep(
     case 'AG-03-HEURISTIC': agent = new Ag03HeuristicAgent(); break
     case 'AG-03-HEURISTIC2': agent = new Ag03Heuristic2Agent(); break
     case 'AG-03-MERGE': agent = new Ag03MergeAgent(); break
-    case 'AG-04': agent = new Ag04InsightAgent(); break
-    case 'AG-04-INSIGHT': agent = new Ag04InsightAgent(); break
+    case 'AG-04': agent = new Ag04UnifiedAgent(); break
     case 'AG-04-MAIN': agent = new Ag04MainAgent(); break
+    case 'AG-04-INSIGHT': agent = new Ag04InsightAgent(); break
     case 'AG-04-MERGE': agent = new Ag04MergeAgent(); break
     case 'AG-05': agent = new Ag05FactcheckAgent(); break
     case 'AG-06': agent = new Ag06DraftAgent(); break
@@ -336,8 +336,23 @@ function extractContextSections(agentId: string, p: any): AgentOutput['sections'
       s('position',      '推奨ポジション',       `${p.differentiationOpportunity?.recommendedPosition ?? ''}\n${p.differentiationOpportunity?.siteDesignImplication ?? ''}`),
     ]
     case 'AG-04': return [
-      s('target',      'ターゲット定義',          `${p.targetDefinition?.whoConverts ?? ''}\n状態: ${p.targetDefinition?.contextualState ?? ''}`),
-      s('insight',     'インサイト',              `葛藤: ${p.targetInsight?.emotionalTension ?? ''}\nトリガー: ${p.targetInsight?.triggerMoment ?? ''}\n示唆: ${p.targetInsight?.communicationImplication ?? ''}`),
+      s('core-analysis',  '課題の本質',   `${(p.coreAnalysis as any)?.rootCause ?? ''}\n最優先: ${(p.coreAnalysis as any)?.primaryIssue ?? ''}`),
+      s('hmw',            'HMW設計設問',  ((p.designDirection as any)?.hmwTop3 ?? []).slice(0, 3).join('\n')),
+      s('core',           '課題定義',     (p.designDirection as any)?.coreProblem ?? ''),
+    ]
+    case 'AG-04-MAIN': return [
+      s('five-whys',   '5Whys・根本原因',        `根本原因: ${(p.fiveWhys as any)?.rootCause ?? ''}`),
+      s('hmw',         'HMW設計設問',            (p.hmwQuestions ?? []).slice(0, 3).map((q: any) => `[${q.priority}] ${q.question}`).join('\n')),
+      s('core',        '課題定義（1文）',         String(p.coreProblemStatement ?? '')),
+    ]
+    case 'AG-04-MERGE': return [
+      s('core',        '統合課題定義',           String(p.coreProblemStatement ?? '')),
+      s('target',      'ターゲット定義（統合）',  JSON.stringify(p.targetDefinition ?? '').slice(0, 400)),
+      s('priorities',  '設計優先順位',           (p.designPriorities ?? []).slice(0, 3).map((d: any) => `[${d.priority}位] ${d.hmwQuestion}: ${d.designAction}`).join('\n')),
+    ]
+    case 'AG-04-INSIGHT': return [
+      s('target',      'ターゲット定義',          `${(p.targetDefinition as any)?.whoConverts ?? ''}\n状態: ${(p.targetDefinition as any)?.contextualState ?? ''}`),
+      s('insight',     'インサイト',              `葛藤: ${(p.targetInsight as any)?.emotionalTension ?? ''}\nトリガー: ${(p.targetInsight as any)?.triggerMoment ?? ''}`),
       s('problems',    '解くべき問い',            (p.coreProblemStatements ?? []).slice(0, 3).map((x: any) => `[${x.priority}] ${x.statement}`).join('\n')),
     ]
     case 'AG-05': return [
@@ -400,16 +415,6 @@ function extractContextSections(agentId: string, p: any): AgentOutput['sections'
       s('strategy',    '差別化戦略',             `${(p.differentiationStrategy as any)?.coreMessage ?? ''}`),
       s('principles',  '設計原則（競合より）',   (p.siteDesignPrinciples ?? []).slice(0, 3).map((x: any) => `[${x.priority}] ${x.principle}`).join('\n')),
     ]
-    case 'AG-04-MAIN': return [
-      s('five-whys',   '5Whys・根本原因',        `根本原因: ${(p.fiveWhys as any)?.rootCause ?? ''}`),
-      s('hmw',         'HMW設計設問',            (p.hmwQuestions ?? []).slice(0, 3).map((q: any) => `[${q.priority}] ${q.question}`).join('\n')),
-      s('core',        '課題定義（1文）',         String(p.coreProblemStatement ?? '')),
-    ]
-    case 'AG-04-MERGE': return [
-      s('core',        '統合課題定義',           String(p.coreProblemStatement ?? '')),
-      s('target',      'ターゲット定義（統合）',  JSON.stringify(p.targetDefinition ?? '').slice(0, 400)),
-      s('priorities',  '設計優先順位',           (p.designPriorities ?? []).slice(0, 3).map((d: any) => `[${d.priority}位] ${d.hmwQuestion}: ${d.designAction}`).join('\n')),
-    ]
     case 'AG-07A': return [
       s('mission',     'サイトミッション',        String(p.siteMission ?? '')),
       s('concept',     'コアコンセプト・主要CV',  `コンセプト: ${p.siteCoreConcept ?? ''}\n主要CV: ${p.primaryCV ?? ''}`),
@@ -437,11 +442,6 @@ function extractContextSections(agentId: string, p: any): AgentOutput['sections'
       s('axis1',       '軸1（エリア×規模）',      `${(p.axis1_area_scale as any)?.qualitativeAssessment ?? ''}\n示唆: ${(p.axis1_area_scale as any)?.designImplication ?? ''}`),
       s('axis4',       '軸4（デジタル成熟度）',    `${(p.axis4_industry_digital as any)?.qualitativeAssessment ?? ''}\n示唆: ${(p.axis4_industry_digital as any)?.designImplication ?? ''}`),
       s('integrated',  '統合ポジション',          `現在地: ${(p.integratedPosition as any)?.summary ?? ''}\n差別化機会: ${(p.integratedPosition as any)?.uniqueOpportunity ?? ''}`),
-    ]
-    case 'AG-04-INSIGHT': return [
-      s('target',      'ターゲット定義',          `${(p.targetDefinition as any)?.whoConverts ?? ''}\n状態: ${(p.targetDefinition as any)?.contextualState ?? ''}`),
-      s('insight',     'インサイト',              `葛藤: ${(p.targetInsight as any)?.emotionalTension ?? ''}\nトリガー: ${(p.targetInsight as any)?.triggerMoment ?? ''}`),
-      s('problems',    '解くべき問い',            (p.coreProblemStatements ?? []).slice(0, 3).map((x: any) => `[${x.priority}] ${x.statement}`).join('\n')),
     ]
     case 'AG-07C-1':
     case 'AG-07C-2':

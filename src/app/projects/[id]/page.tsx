@@ -127,6 +127,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
   const [agentStatuses, setAgentStatuses] = useState<Record<string, 'running' | 'completed' | 'failed' | 'skipped'>>({})
   const [restarting, setRestarting] = useState(false)
   const [stopping, setStopping] = useState(false)
+  const [executionMode, setExecutionMode] = useState<'precision' | 'standard'>('standard')
 
   useEffect(() => {
     fetch(`/api/projects/${id}`).then(r => r.json()).then(setProject).catch(() => {})
@@ -267,7 +268,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
       corporate: 'ag-02-corp', campaign: 'ag-02-camp', general: 'ag-02-general',
     }
     const primaryAgent = (industryMap[project.industryType] ?? 'ag-02-general') as PipelineConfig['primaryAgent']
-    const config: PipelineConfig = { mode: 'full', primaryAgent, subAgents: [] }
+    const config: PipelineConfig = { mode: 'full', primaryAgent, subAgents: [], executionMode }
 
     try {
       const res = await fetch('/api/executions/pipeline', {
@@ -300,7 +301,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
         const res = await fetch(`/api/executions/${vIdForResume}/resume`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({}),
+          body: JSON.stringify({ executionMode }),
         })
         if (!res.ok) { setErrorMessage(`${res.status}: ${(await res.text()).slice(0, 200)}`); setAppStatus('error'); return }
         await consumeSSE(res)
@@ -330,7 +331,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
       const res = await fetch(`/api/executions/${vId}/resume`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ agentSelection }),
+        body: JSON.stringify({ agentSelection, executionMode }),
       })
       if (!res.ok) {
         const text = await res.text()
@@ -584,6 +585,39 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
           })}
 
           <div style={{ padding: '16px 22px', marginTop: 'auto' }}>
+            {/* 実行モード選択 */}
+            {appStatus !== 'running' && (
+              <div style={{ marginBottom: '12px', border: '1px solid var(--line2)', borderRadius: '2px', overflow: 'hidden' }}>
+                {(['standard', 'precision'] as const).map(m => (
+                  <label
+                    key={m}
+                    style={{
+                      display: 'flex', alignItems: 'flex-start', gap: '8px',
+                      padding: '10px 12px', cursor: 'pointer',
+                      background: executionMode === m ? 'var(--bg2)' : 'transparent',
+                      borderBottom: m === 'standard' ? '1px solid var(--line2)' : 'none',
+                    }}
+                  >
+                    <input
+                      type="radio"
+                      name="executionMode"
+                      value={m}
+                      checked={executionMode === m}
+                      onChange={() => setExecutionMode(m)}
+                      style={{ marginTop: '2px', flexShrink: 0 }}
+                    />
+                    <div>
+                      <div style={{ fontFamily: 'var(--font-d)', fontSize: '8px', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--ink)' }}>
+                        {m === 'standard' ? 'Standard（標準）' : 'Precision（高精度）'}
+                      </div>
+                      <div style={{ fontFamily: 'var(--font-s)', fontSize: '10px', color: 'var(--ink3)', marginTop: '2px' }}>
+                        {m === 'standard' ? 'Web検索なし・高速・約$4' : 'Web検索あり・詳細分析・約$6'}
+                      </div>
+                    </div>
+                  </label>
+                ))}
+              </div>
+            )}
             <button
               onClick={startPipeline}
               disabled={appStatus === 'running'}

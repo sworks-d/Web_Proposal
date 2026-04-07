@@ -26,7 +26,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id: versionId } = await params
-  const { agentSelection } = await req.json()
+  const { agentSelection, executionMode } = await req.json()
 
   const version = await prisma.proposalVersion.findUnique({
     where: { id: versionId },
@@ -117,7 +117,7 @@ export async function POST(
         send({ type: 'agent_start', agentId, label })
         send({ type: 'status', message: `${label} 実行中...` })
         try {
-          const output = await runAgentStep(versionId, agentId, { projectContext, previousOutputs }, config)
+          const output = await runAgentStep(versionId, agentId, { projectContext, previousOutputs, executionMode }, config)
           previousOutputs.push(output)
           send({ type: 'agent_complete', agentId, status: 'completed' })
           return output
@@ -264,17 +264,20 @@ export async function POST(
         // Phase 2: AG-04クラスター → AG-05 → CHECKPOINT
         // ────────────────────────────────────────────
         } else if (phase === 2) {
-          send({ type: 'status', message: 'AG-04 課題構造化クラスター実行中（並列）...' })
-
-          // AG-04クラスター並列実行
-          const [ag04Main, ag04Insight] = await Promise.all([
-            run('AG-04-MAIN',    'AG-04-MAIN 5Whys・イシューツリー・HMW'),
-            run('AG-04-INSIGHT', 'AG-04-INSIGHT インサイト・JTBD分析'),
-          ])
-          newOutputs.push(ag04Main, ag04Insight)
-
-          const ag04Merge = await run('AG-04-MERGE', 'AG-04-MERGE 課題定義統合')
-          newOutputs.push(ag04Merge)
+          if (executionMode === 'precision') {
+            send({ type: 'status', message: 'AG-04 課題構造化クラスター実行中（並列・Precision）...' })
+            const [ag04Main, ag04Insight] = await Promise.all([
+              run('AG-04-MAIN',    'AG-04-MAIN 5Whys・イシューツリー・HMW'),
+              run('AG-04-INSIGHT', 'AG-04-INSIGHT インサイト・JTBD分析'),
+            ])
+            newOutputs.push(ag04Main, ag04Insight)
+            const ag04Merge = await run('AG-04-MERGE', 'AG-04-MERGE 課題定義統合')
+            newOutputs.push(ag04Merge)
+          } else {
+            send({ type: 'status', message: 'AG-04 課題定義実行中（Standard）...' })
+            const ag04 = await run('AG-04', 'AG-04 課題定義（統合）')
+            newOutputs.push(ag04)
+          }
 
           const ag05 = await run('AG-05', 'AG-05 ファクトチェック')
           newOutputs.push(ag05)
@@ -290,16 +293,21 @@ export async function POST(
           const ag05Json = safeParseJson(ag05Exec?.results[0]?.outputJson ?? '')
           const ag05Targets = ag05Json ? extractAG05Targets(ag05Json) : new Map<string, string>()
 
-          // AG-04クラスターへのフィードバック
-          const [fb04Main, fb04Insight] = await Promise.all([
-            feedbackCheck('AG-04-MAIN',    'AG-04-MAIN 5Whys', ag05Targets.get('AG-04-MAIN')),
-            feedbackCheck('AG-04-INSIGHT', 'AG-04-INSIGHT インサイト・JTBD', ag05Targets.get('AG-04-INSIGHT')),
-          ])
-          const fb04MergeNote = [
-            (fb04Main || fb04Insight) ? MERGE_RERUN_NOTE : '',
-            ag05Targets.get('AG-04-MERGE') ?? '',
-          ].filter(Boolean).join('\n\n')
-          if (fb04MergeNote) await feedbackCheck('AG-04-MERGE', 'AG-04-MERGE 課題定義統合', fb04MergeNote)
+          // AG-04へのフィードバック
+          if (executionMode === 'precision') {
+            const [fb04Main, fb04Insight] = await Promise.all([
+              feedbackCheck('AG-04-MAIN',    'AG-04-MAIN 5Whys', ag05Targets.get('AG-04-MAIN')),
+              feedbackCheck('AG-04-INSIGHT', 'AG-04-INSIGHT インサイト・JTBD', ag05Targets.get('AG-04-INSIGHT')),
+            ])
+            const fb04MergeNote = [
+              (fb04Main || fb04Insight) ? MERGE_RERUN_NOTE : '',
+              ag05Targets.get('AG-04-MERGE') ?? '',
+            ].filter(Boolean).join('\n\n')
+            if (fb04MergeNote) await feedbackCheck('AG-04-MERGE', 'AG-04-MERGE 課題定義統合', fb04MergeNote)
+          } else {
+            const ag04Note = ag05Targets.get('AG-04')
+            if (ag04Note) await feedbackCheck('AG-04', 'AG-04 課題定義', ag04Note)
+          }
 
           // AG-05に指摘されたPhase 1エージェントへのフィードバック
           const phase1Ids: AgentId[] = [

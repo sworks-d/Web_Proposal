@@ -130,39 +130,34 @@ export function renderAG03(json: any): OutputSection[] {
 export function renderAG04(json: any): OutputSection[] {
   return [
     {
-      label: 'ターゲット定義',
+      label: '根本原因',
       confidence: json.confidence,
-      items: [
-        { type: 'text', content: json.targetDefinition?.whoConverts ?? '' },
-        { type: 'text', content: `状態: ${json.targetDefinition?.contextualState ?? ''}`, note: 'secondary' },
-        { type: 'text', content: `CV行動: ${json.targetDefinition?.cvAction ?? ''}`, note: 'secondary' }
-      ]
+      items: [{ type: 'text', content: json.rootCause ?? '' }]
     },
-    {
-      label: 'ターゲットインサイト',
-      items: [
-        { type: 'text', content: json.targetInsight?.emotionalTension ?? '' },
-        { type: 'list', content: json.targetInsight?.realDrivers ?? [] },
-        { type: 'text', content: `トリガー: ${json.targetInsight?.triggerMoment ?? ''}`, note: 'secondary' },
-        { type: 'text', content: `訴求示唆: ${json.targetInsight?.communicationImplication ?? ''}`, note: 'secondary' }
-      ]
-    },
-    {
-      label: '構造的課題（なぜなぜ分析）',
-      items: (json.structuralChallenges ?? []).slice(0, 3).map((c: any) => ({
+    ...(json.issueTree?.length ? [{
+      label: '課題構造（MECE）',
+      items: (json.issueTree as any[]).map((b: any) => ({
         type: 'principle' as const,
-        content: c.rootCause ?? '',
-        note: `表面: ${c.surfaceChallenge ?? ''} — Webで解決可能: ${c.isWebSolvable ? 'Yes' : 'No'}`
+        content: `[${b.priority ?? '?'}] ${b.issue ?? ''}`,
+        note: b.designAction ?? ''
       }))
-    },
-    {
-      label: '解くべき問い（AG-06へのバトン）',
-      items: (json.coreProblemStatements ?? []).slice(0, 3).map((s: any) => ({
+    }] : []),
+    ...(json.hmwQuestions?.length ? [{
+      label: 'HMW設計設問',
+      items: (json.hmwQuestions as any[]).slice(0, 4).map((q: any) => ({
         type: 'principle' as const,
-        content: s.statement ?? '',
-        note: `優先度: ${s.priority ?? '?'} — ${s.direction ?? ''}`
+        content: `[${q.priority ?? '?'}] ${q.question ?? ''}`,
+        note: q.designDirection ?? ''
       }))
-    }
+    }] : []),
+    ...(json.criticalBarrier ? [{
+      label: '最重要バリアー',
+      items: [{ type: 'warning' as const, content: json.criticalBarrier.barrier ?? '', note: json.criticalBarrier.designSolution ?? '' }]
+    }] : []),
+    ...(json.coreProblemStatement ? [{
+      label: '課題定義（1文）',
+      items: [{ type: 'text' as const, content: json.coreProblemStatement }]
+    }] : [])
   ]
 }
 
@@ -198,50 +193,40 @@ export function renderAG05(json: any): OutputSection[] {
 }
 
 export function renderAG06(json: any): OutputSection[] {
+  const recommended = (json.proposalAxes ?? []).find((a: any) => a.isRecommended) ?? json.proposalAxes?.[0]
+  const siteStructure = json.siteStructure ?? {}
+  const pages: any[] = json.pageStructure ?? []
   return [
     {
-      label: 'サイトコアコンセプト',
+      label: '推奨提案軸',
       confidence: json.confidence,
       items: [
-        { type: 'text', content: json.siteDesignSummary?.coreConcept ?? '' },
-        { type: 'text', content: `主要CV: ${json.siteDesignSummary?.primaryCV ?? ''}`, note: 'secondary' }
+        { type: 'text', content: recommended?.statement ?? '' },
+        { type: 'text', content: json.recommendationRationale ?? '', note: 'secondary' }
       ]
     },
     {
       label: '情報設計（IA）',
       items: [
-        { type: 'text', content: `構造: ${json.ia?.structure ?? ''}` },
-        { type: 'badge-list', content: json.ia?.globalNav ?? [] }
+        { type: 'badge-list', content: siteStructure.globalNavigation ?? [] },
+        { type: 'text', content: `主要ターゲット: ${siteStructure.primaryTarget ?? ''}`, note: 'secondary' }
       ]
     },
-    {
-      label: `ページ構成（${json.ia?.pages?.length ?? 0}ページ）`,
-      items: (json.ia?.pages ?? []).map((p: any) => ({
+    ...(pages.length ? [{
+      label: `ページ構成（${pages.length}ページ）`,
+      items: pages.slice(0, 6).map((p: any) => ({
         type: 'text' as const,
-        content: p.title,
-        note: p.purpose
+        content: p.pageName ?? '',
+        note: p.role ?? ''
       }))
-    },
-    {
-      label: '運用・技術設計',
+    }] : []),
+    ...(json.navigationDesign ? [{
+      label: '導線設計',
       items: [
-        { type: 'text', content: `推奨CMS: ${json.operationalDesign?.cmsRecommendation ?? ''}` },
-        { type: 'text', content: `運用者スキル想定: ${json.operationalDesign?.operatorSkillLevel ?? ''}`, note: 'secondary' },
-        ...(json.operationalDesign?.highRiskItems ?? []).map((r: any) => ({
-          type: 'warning' as const,
-          content: r.item,
-          note: r.mitigation
-        }))
+        { type: 'text' as const, content: `ハードCV: ${json.navigationDesign.hardCvPath ?? ''}` },
+        { type: 'text' as const, content: `ソフトCV: ${json.navigationDesign.softCvPath ?? ''}`, note: 'secondary' }
       ]
-    },
-    {
-      label: '提案書章構成（スライド概算）',
-      items: (json.slideOutline ?? []).map((ch: any) => ({
-        type: 'principle' as const,
-        content: `${ch.chapterTitle}（推定${ch.estimatedSlides}枚）`,
-        note: ch.role
-      }))
-    }
+    }] : [])
   ]
 }
 
@@ -299,7 +284,7 @@ export function renderAG02Journey(json: any): OutputSection[] {
       items: phases.map((p: any) => ({
         type: 'principle' as const,
         content: `${p.phase}: ${p.designDirection ?? ''}`,
-        note: `バリアー: ${(p.barriers ?? []).join(' / ')}`
+        note: `バリアー: ${(p.barriers ?? []).map((b: any) => b.barrier ?? '').join(' / ')}`
       }))
     },
     ...(json.criticalMoment ? [{
@@ -368,8 +353,8 @@ export function renderAG03Heuristic(json: any): OutputSection[] {
       confidence: json.confidence,
       items: evals.map((e: any) => ({
         type: 'principle' as const,
-        content: `${e.competitorName}: 総合 ${e.overallScore ?? '?'}/10`,
-        note: e.strategicConclusion ?? (e.criticalFindings ?? []).join(' / ')
+        content: `${e.competitorName}: UXスコア ${e.overallUXScore ?? '?'}/10`,
+        note: e.overallAssessment ?? e.strategicConclusion ?? ''
       }))
     }
   ]
@@ -427,13 +412,13 @@ export function renderAG03Merge(json: any): OutputSection[] {
       label: 'トップ設計機会',
       items: opps.slice(0, 4).map((o: any) => ({
         type: 'principle' as const,
-        content: `P${o.priority}: ${o.title ?? o.opportunity ?? ''}`,
-        note: o.rationale ?? o.description
+        content: `P${o.priority}: ${o.opportunity ?? o.title ?? ''}`,
+        note: o.designAction ?? o.evidence ?? ''
       }))
     },
-    ...(json.ag04Handoff ? [{
+    ...(json.forAG04 ? [{
       label: '→ AG-04 バトン',
-      items: [{ type: 'warning' as const, content: json.ag04Handoff }]
+      items: [{ type: 'warning' as const, content: json.forAG04 }]
     }] : [])
   ]
 }
@@ -713,8 +698,6 @@ export function renderAgentOutput(agentId: string, json: any | null, rawText?: s
     case 'AG-03-DATA':       return renderAG03Data(json)
     case 'AG-03-MERGE':      return renderAG03Merge(json)
     case 'AG-04':            return renderAG04(json)
-    case 'AG-04-MAIN':       return renderAG04Main(json)
-    case 'AG-04-MERGE':      return renderAG04Merge(json)
     case 'AG-05':            return renderAG05(json)
     case 'AG-06':            return renderAG06(json)
     case 'AG-07':            return renderAG07(json)

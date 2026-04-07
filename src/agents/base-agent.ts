@@ -6,14 +6,14 @@ const AG_MAX_TOKENS: Record<string, number> = {
   'AG-01': 4096,
   'AG-01-RESEARCH': 8192,
   'AG-01-MERGE':    4096,
-  // AG-02系
-  'AG-02':          16384,
-  'AG-02-STP':      16384,
-  'AG-02-JOURNEY':  16384,
-  'AG-02-VPC':      16384,
-  'AG-02-MERGE':    16384,
-  'AG-02-POSITION': 8192,
-  'AG-02-VALIDATE': 8192,
+  // AG-02系（Haiku前提: 直接callClaudeするものは6000以下に制限）
+  'AG-02':          6000,
+  'AG-02-STP':      16384,  // callSection使用（per-call 6000）
+  'AG-02-JOURNEY':  16384,  // callSection使用（per-call 7000）
+  'AG-02-VPC':      16384,  // callSection使用（per-call 6000）
+  'AG-02-MERGE':    16384,  // callSection使用（per-call 6000）
+  'AG-02-POSITION': 16384,  // callSection使用（per-call 6000）
+  'AG-02-VALIDATE': 4096,
   // AG-03系
   'AG-03':          16384,
   'AG-03-HEURISTIC':  16384,
@@ -22,7 +22,7 @@ const AG_MAX_TOKENS: Record<string, number> = {
   'AG-03-DATA':       16384,
   'AG-03-MERGE':      16384,
   // AG-04系
-  'AG-04':          16384,
+  'AG-04':          4096,
   'AG-04-MAIN':     16384,
   'AG-04-INSIGHT':  16384,
   'AG-04-MERGE':    16384,
