@@ -214,10 +214,25 @@ ${agContext || '（AGデータなし）'}
 
 JSONのみを返してください。`
 
-  const raw = await callClaude(systemPrompt, userMessage, { modelType: 'quality', maxTokens: 4096 })
-  const result = parseJson<Sg04Output>(raw, `SG-04:${chapter.id}`)
+  const raw = await callClaude(systemPrompt, userMessage, { modelType: 'quality', maxTokens: 8192 })
 
-  const slides = Array.isArray(result?.slides) ? result.slides : []
+  let slides: Sg04Output['slides'] = []
+  try {
+    const result = parseJson<Sg04Output>(raw, `SG-04:${chapter.id}`)
+    slides = Array.isArray(result?.slides) ? result.slides : []
+  } catch {
+    // 途中でトークン切れた場合、slidesの途中まで抽出を試みる
+    const match = raw.match(/"slides"\s*:\s*(\[[\s\S]*)/)
+    if (match) {
+      try {
+        const partial = parseJson<Sg04Output['slides']>(match[1], `SG-04:${chapter.id}:partial`)
+        slides = Array.isArray(partial) ? partial : []
+        console.warn(`[SG-04:${chapter.id}] partial recovery: ${slides.length} slides`)
+      } catch {
+        console.warn(`[SG-04:${chapter.id}] parse failed, skipping chapter`)
+      }
+    }
+  }
   return slides.map((s, i) => ({
     ...s,
     slideNumber: startSlideNumber + i,

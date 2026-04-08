@@ -1,5 +1,6 @@
 import { SgBaseAgent } from './sg-base-agent'
 import { SgInput, Sg02Output, Sg01Output, SgAgentId } from './sg-types'
+import { loadPrompt } from '@/lib/prompt-loader'
 
 export class Sg02Agent extends SgBaseAgent {
   id: SgAgentId = 'SG-02'
@@ -8,33 +9,7 @@ export class Sg02Agent extends SgBaseAgent {
   protected maxTokens = 4096
 
   getSystemPrompt(): string {
-    return `あなたは提案書専門のコピーライターです。
-分析データとインサイトをもとに、相手の心に刺さるキーメッセージと章コピーを生成してください。
-
-【絶対禁止】
-- 「〜を実現」「〜を強化」「〜を推進」などの抽象的な動詞
-- 業界用語・カタカナ語の羅列
-- 「最適化」「最大化」「シナジー」などのビジネス曖昧語
-- 競合も使いそうな普通のコピー
-
-【必須】
-- ターゲット本人が使う言葉で書く
-- 「そう、それ」と思わせる具体性・リアリティ
-- 違和感・葛藤・本音を言語化する
-- 一文目で「読み続けたい」と思わせる
-
-出力はJSON形式のみ：
-{
-  "keyMessage": "提案書全体を貫く1行のキーメッセージ",
-  "subCopy": "キーメッセージを補完する2〜3行のサブコピー",
-  "chapterCopies": [
-    {
-      "chapterId": "chapter-id",
-      "heading": "章の見出しコピー（体言止めNG、動詞で終わる）",
-      "hook": "この章の冒頭で言う一言（聴衆を引き込むフック）"
-    }
-  ]
-}`
+    return loadPrompt('sg-02-narrative')
   }
 
   buildUserMessage(input: SgInput): string {

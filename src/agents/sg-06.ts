@@ -1,5 +1,6 @@
 import { SgBaseAgent } from './sg-base-agent'
 import { SgInput, SgFinalOutput, Sg01Output, Sg02Output, Sg03Output, Sg04Output, Sg05Output, SgAgentId, VisualType } from './sg-types'
+import { loadPrompt } from '@/lib/prompt-loader'
 
 export class Sg06Agent extends SgBaseAgent {
   id: SgAgentId = 'SG-06'
@@ -8,47 +9,7 @@ export class Sg06Agent extends SgBaseAgent {
   protected maxTokens = 8192
 
   getSystemPrompt(): string {
-    return `あなたは提案書の最終アセンブラーです。
-各エージェントの出力を統合し、pptx生成用の最終JSONを出力してください。
-
-トーン別の調整方針：
-- simple: 本文を短く削ぎ落とす。1スライド1メッセージを徹底。
-- rich: 本文は適度に詳しく。データ・根拠を追記してもよい。
-- pop: 本文に絵文字的なアイコン指示を加える。明るい言葉遣いに。
-
-相手別の調整方針：
-- executive: 冒頭に結論を1文追加。KPI・数字を強調。
-- manager: 詳細説明・根拠を本文に織り込む。
-- creative: キャッチーな言葉遣いに。世界観重視。
-
-出力はJSON形式のみ：
-{
-  "metadata": {
-    "clientName": "クライアント名",
-    "type": "full|strategy|analysis|content|improvement",
-    "tone": "simple|rich|pop",
-    "audience": "executive|manager|creative",
-    "slideCount": 25
-  },
-  "concept": {
-    "keyMessage": "キーメッセージ",
-    "subCopy": "サブコピー"
-  },
-  "slides": [
-    {
-      "slideNumber": 1,
-      "chapterId": "chapter-id",
-      "slotId": "slot-id",
-      "narrativeRole": "intro|development|climax|close",
-      "title": "スライドタイトル",
-      "body": ["箇条書き1", "箇条書き2"],
-      "visualType": "none|photo|chart|diagram|icon|screenshot",
-      "visualDirection": "ビジュアル指示",
-      "layoutHint": "レイアウトパターン名",
-      "notes": "プレゼンターメモ"
-    }
-  ]
-}`
+    return loadPrompt('sg-06-assembly')
   }
 
   buildUserMessage(input: SgInput): string {
@@ -99,7 +60,7 @@ export class Sg06Agent extends SgBaseAgent {
       keyMessage: sg02?.keyMessage ?? '',
       subCopy: sg02?.subCopy ?? '',
       orderedSlots,
-    }, null, 2).slice(0, 12000)
+    }, null, 2).slice(0, 24000)
 
     return `以下のデータを統合して最終スライドJSONを生成してください。
 トーンと相手に合わせて本文を最終調整してください。

@@ -1,5 +1,6 @@
 import { SgBaseAgent } from './sg-base-agent'
 import { SgInput, Sg01Output, SgAgentId } from './sg-types'
+import { loadPrompt } from '@/lib/prompt-loader'
 
 const CHAPTER_MAP: Record<string, Record<string, string[]>> = {
   full: {
@@ -61,25 +62,7 @@ export class Sg01Agent extends SgBaseAgent {
   protected modelType = 'quality' as const
 
   getSystemPrompt(): string {
-    return `あなたは提案書の構成設計の専門家です。
-分析データとユーザーの要件をもとに、最適なスライド構成を設計してください。
-
-出力はJSON形式のみ。以下のスキーマに従ってください：
-{
-  "chapters": [
-    {
-      "id": "chapter-id",
-      "title": "章タイトル",
-      "chapterRole": "この章の役割・目的",
-      "slideCount": 3,
-      "slots": [
-        { "id": "slot-id", "role": "スライドの役割", "purpose": "このスライドで伝えること" }
-      ]
-    }
-  ],
-  "totalSlides": 25,
-  "rationale": "この構成にした理由"
-}`
+    return loadPrompt('sg-01-structure')
   }
 
   buildUserMessage(input: SgInput): string {

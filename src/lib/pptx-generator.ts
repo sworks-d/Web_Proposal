@@ -190,9 +190,24 @@ export async function generatePptxBuffer(output: SgFinalOutput): Promise<Buffer>
   // Cover slide
   addCoverSlide(pptx, output, theme)
 
+  // 失敗スライドを警告表示に変換
+  const validSlides = output.slides.map(slide => {
+    if (slide.title.startsWith('[生成失敗]') || slide.body.length === 0) {
+      return {
+        ...slide,
+        title: slide.title.replace('[生成失敗] ', '※ '),
+        body: slide.body.length === 0
+          ? ['（このスライドの本文は自動生成に失敗しました）']
+          : slide.body,
+        layoutHint: 'center-message',
+      }
+    }
+    return slide
+  })
+
   // Content slides
-  const totalSlides = output.slides.length + 1 // +1 for cover
-  output.slides.forEach((slide, i) => {
+  const totalSlides = validSlides.length + 1 // +1 for cover
+  validSlides.forEach((slide, i) => {
     addContentSlide(pptx, slide, theme, i + 2, totalSlides)
   })
 
