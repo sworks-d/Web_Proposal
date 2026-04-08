@@ -9,10 +9,122 @@
 
 目標:
 - AGの分析をクライアントが「これでいこう」と即決する提案書に変換
-- 図解・ワイヤーフレームを実際に描画（SVG/HTML）
-- PDF出力
+- 表・グラフを実際に描画（chart.js / HTML table）
+- PDF出力（A4サイズ）
 
-設計ドキュメント: `/home/claude/Web_Proposal/improvements/12_SG_PIPELINE_IMPROVEMENT.md`
+設計ドキュメント: `improvements/12_SG_PIPELINE_IMPROVEMENT.md`
+
+---
+
+## パラメータ一覧
+
+### 種別（variant）— 何を出力するか
+
+| 値 | 説明 | 章構成 | 想定枚数 |
+|---|---|---|---|
+| `full` | フルリニューアル | 課題→分析→ターゲット→ジャーニー→コンセプト→設計→IA→コンテンツ→KPI | 25-40枚 |
+| `strategy` | 戦略・方向性 | 課題→ターゲット→インサイト→コンセプト→実現イメージ | 15-25枚 |
+| `analysis` | 現状分析 | 現状分析→競合分析→ユーザー行動→課題構造→方向性 | 15-25枚 |
+| `content` | コンテンツ追加 | コンテンツ課題→ターゲット×コンテンツ→戦略→サイトマップ→ページ設計 | 15-25枚 |
+| `spot` | 部分改善・特定ページ | 問題点→課題優先順位→施策一覧→施策詳細→期待効果 | 10-20枚 |
+
+### 型（narrativeType）— どう伝えるか
+
+| 値 | 説明 | 向いている相手 | デフォルト種別 |
+|---|---|---|---|
+| `insight` | 本質を突く | 課題が言語化されていない | full, strategy |
+| `data` | ファクトで説得 | 経営層・数字重視 | analysis |
+| `vision` | 大きな絵を描く | 経営者・決裁者 | — |
+| `solution` | 実務的に解決 | 担当者・課題が明確 | content, spot |
+
+### トーン（tone）
+
+| 値 | イメージ | 背景色 | アクセント色 |
+|---|---|---|---|
+| `simple` | Apple的 | #FFFFFF | #0071E3 |
+| `rich` | FAS的 | #1A1A1A | #C9A86C |
+| `pop` | 東組採用的 | #FFFFFF | #FF6B35 |
+
+### 向き・サイズ（orientation）
+
+**A4サイズ**（16:9ではない）
+
+| 値 | サイズ（mm） | ピクセル（96dpi） |
+|---|---|---|
+| `landscape` | 297×210 | 1123×794 |
+| `portrait` | 210×297 | 794×1123 |
+
+### 聴衆（audience）
+
+| 値 | 特徴 |
+|---|---|
+| `executive` | 結論先行、数字重視、簡潔 |
+| `manager` | 詳細説明、根拠重視、網羅的 |
+| `creative` | ビジュアル重視、感性訴求 |
+
+### 重点章（focusChapters）
+
+選択した章は **+60%** のページ配分。最大2つ。JSON配列で保存。
+
+### スポット対象（targetScope）— 種別がspotの時のみ
+
+| 値 | 使用するAGソース |
+|---|---|
+| `top` | AG-07C-1, AG-02-STP, AG-04-INSIGHT |
+| `list` | AG-07C-2, AG-02-JOURNEY |
+| `detail` | AG-07C-3, AG-02-JOURNEY |
+| `cv-flow` | AG-07C-4, AG-04-INSIGHT |
+| `navigation` | AG-07C-1, AG-02-JOURNEY |
+| `other` | 全AGソース（自由入力） |
+
+### 提案書名（name）
+
+任意。例: 「経営層向け戦略提案」
+
+---
+
+## エージェント構成
+
+| SG | モデル | 役割 |
+|---|---|---|
+| SG-01 | Sonnet | 章構成・型選択・ページ配分 |
+| SG-02 | **Opus** (`claude-opus-4-20250514`) | インサイト・コピー・緩急設計 |
+| SG-04 | Sonnet | 本文生成・スライドタイプ決定 |
+| SG-06 | Sonnet | ビジュアル生成（chart.js/table/SVG） |
+
+**削除したSG:**
+- SG-03（心理設計）→ SG-02に統合
+- SG-05（レイアウト設計）→ SG-04に統合
+
+---
+
+## ビジュアル生成（SG-06）
+
+**生成するもの:**
+| タイプ | 方法 |
+|---|---|
+| 比較表・一覧表 | HTML `<table>` |
+| 棒グラフ・円グラフ・線グラフ | chart.js |
+| 2x2マトリクス | SVG |
+| フロー図（3-5ステップ） | SVG |
+
+**生成しないもの（プレースホルダー + 指示）:**
+| タイプ | 出力 |
+|---|---|
+| ワイヤーフレーム | グレーボックス + 「CDが作成: 〇〇」テキスト |
+| 複雑な図解 | プレースホルダー + 指示テキスト |
+
+---
+
+## 既存ファイル（置き換え対象）
+
+```
+src/agents/sg-01.ts〜sg-06.ts  → 削除
+src/agents/sg-types.ts         → src/lib/sg/types.ts に移行
+src/lib/sg-pipeline.ts         → src/lib/sg/sg-pipeline.ts に置き換え
+src/app/api/sg-generation/     → src/app/api/sg/ に置き換え
+prisma/schema.prisma           → SgGenerationモデルを更新
+```
 
 ---
 
