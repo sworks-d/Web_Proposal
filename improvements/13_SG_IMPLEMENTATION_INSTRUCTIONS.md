@@ -885,15 +885,20 @@ src/app/api/sg/
 
 1. `npx prisma db push`（スキーマ）
 2. `src/lib/sg/types.ts`
-3. `prompts/sg-01-structure/default.md` ← 作成済み
-4. `prompts/sg-02-narrative/default.md` ← 作成済み
-5. `prompts/sg-04-content/default.md` ← **要作成**
-6. `prompts/sg-06-visual/default.md` ← **要作成**
-7. `src/lib/sg/sg-pipeline.ts`
-8. `src/lib/sg/slide-renderer.tsx`
-9. `src/lib/sg/pdf-generator.ts`
-10. API routes
-11. UI更新
+3. `src/lib/sg/sg-pipeline.ts`
+4. `src/lib/sg/slide-renderer.tsx`
+5. `src/lib/sg/pdf-generator.ts`
+6. API routes
+7. 提案書一覧UI
+
+## 作成済みプロンプト
+
+```
+prompts/sg-01-structure/default.md  ← 作成済み
+prompts/sg-02-narrative/default.md  ← 作成済み
+prompts/sg-04-content/default.md    ← 作成済み
+prompts/sg-06-visual/default.md     ← 作成済み
+```
 
 ---
 
