@@ -1,14 +1,22 @@
 'use client'
 import { useState, useEffect, useCallback, use } from 'react'
 import { useRouter } from 'next/navigation'
-import { ProposalType, ToneType } from '@/lib/sg/types'
+import { ProposalVariant, NarrativeType, ToneType, VARIANT_DEFAULT_NARRATIVE, SPOT_TARGET_OPTIONS } from '@/lib/sg/types'
 
-const PROPOSAL_TYPES: { value: ProposalType | 'auto'; label: string; desc: string }[] = [
-  { value: 'auto',     label: '自動選択',    desc: 'AGから最適な型を選ぶ' },
-  { value: 'insight',  label: 'インサイト型', desc: '課題が言語化されていない案件' },
-  { value: 'data',     label: 'データ型',    desc: '経営層・ROI重視' },
-  { value: 'vision',   label: 'ビジョン型',  desc: 'フルリニューアル・ブランド再定義' },
-  { value: 'solution', label: '課題解決型',  desc: '課題明確な改善案件' },
+const VARIANTS: { value: ProposalVariant; label: string; desc: string }[] = [
+  { value: 'full',     label: 'フル提案',   desc: '課題〜KPIまで全章' },
+  { value: 'strategy', label: '戦略提案',   desc: 'コンセプト・方向性に集中' },
+  { value: 'analysis', label: '分析報告',   desc: '現状・競合・ユーザー分析' },
+  { value: 'content',  label: 'コンテンツ', desc: 'コンテンツ戦略・設計' },
+  { value: 'spot',     label: 'スポット',   desc: '特定ページ・機能の改善' },
+]
+
+const NARRATIVE_TYPES: { value: NarrativeType | 'auto'; label: string; desc: string }[] = [
+  { value: 'auto',     label: '自動',       desc: '種別から推定' },
+  { value: 'insight',  label: 'インサイト', desc: '本質を突く・課題が未言語化' },
+  { value: 'data',     label: 'データ',     desc: '数字・ROI重視' },
+  { value: 'vision',   label: 'ビジョン',   desc: 'フルリニューアル・ブランド' },
+  { value: 'solution', label: '課題解決',   desc: '課題明確な改善案件' },
 ]
 
 const TONES: { value: ToneType; label: string; desc: string }[] = [
@@ -32,9 +40,11 @@ const SG_STEPS = [
   { id: 'PDF',       label: 'PDF生成' },
 ]
 
-const TYPE_LABELS: Record<string, string> = {
-  auto: '自動', insight: 'インサイト', data: 'データ',
-  vision: 'ビジョン', solution: '課題解決',
+const VARIANT_LABELS: Record<string, string> = {
+  full: 'フル提案', strategy: '戦略', analysis: '分析', content: 'コンテンツ', spot: 'スポット',
+}
+const NARRATIVE_LABELS: Record<string, string> = {
+  insight: 'インサイト', data: 'データ', vision: 'ビジョン', solution: '課題解決',
 }
 const TONE_LABELS: Record<string, string> = {
   simple: 'Simple', rich: 'Rich', pop: 'Pop',
@@ -42,10 +52,13 @@ const TONE_LABELS: Record<string, string> = {
 
 interface SgItem {
   id: string
+  name: string | null
+  variant: string
+  narrativeType: string
+  targetScope: string | null
   status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'ERROR'
   currentStep: string | null
   errorMessage: string | null
-  proposalType: string
   tone: string
   orientation: string
   slideCount: number
@@ -70,11 +83,14 @@ export default function ProposalsPage({ params }: { params: Promise<{ id: string
   const router = useRouter()
 
   // パラメータ
-  const [proposalType, setProposalType] = useState<ProposalType | 'auto'>('auto')
+  const [variant, setVariant] = useState<ProposalVariant>('full')
+  const [narrativeType, setNarrativeType] = useState<NarrativeType | 'auto'>('auto')
   const [tone, setTone] = useState<ToneType>('simple')
   const [orientation, setOrientation] = useState<'landscape' | 'portrait'>('landscape')
   const [slideCount, setSlideCount] = useState(25)
   const [audience, setAudience] = useState<'executive' | 'manager' | 'creative'>('manager')
+  const [targetScope, setTargetScope] = useState('')
+  const [name, setName] = useState('')
 
   // 状態
   const [versionId, setVersionId] = useState<string | null>(null)
@@ -101,11 +117,10 @@ export default function ProposalsPage({ params }: { params: Promise<{ id: string
     if (!versionId) return
     const res = await fetch(`/api/sg/list?versionId=${versionId}`)
     if (!res.ok) return
-    const data: SgItem[] = await res.json()
-    setGenerations(data)
+    const data: { proposals: SgItem[] } = await res.json()
+    setGenerations(data.proposals ?? [])
 
-    // 実行中のものをactiveに
-    const running = data.find(g => g.status === 'RUNNING' || g.status === 'PENDING')
+    const running = (data.proposals ?? []).find(g => g.status === 'RUNNING' || g.status === 'PENDING')
     if (running && !activeSgId) setActiveSgId(running.id)
   }, [versionId, activeSgId])
 
@@ -142,7 +157,10 @@ export default function ProposalsPage({ params }: { params: Promise<{ id: string
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           versionId,
-          proposalType: proposalType === 'auto' ? undefined : proposalType,
+          name: name || undefined,
+          variant,
+          narrativeType: narrativeType === 'auto' ? undefined : narrativeType,
+          targetScope: variant === 'spot' && targetScope ? targetScope : undefined,
           tone,
           orientation,
           slideCount,
@@ -168,6 +186,14 @@ export default function ProposalsPage({ params }: { params: Promise<{ id: string
   const isCompleted = activeStatus?.status === 'COMPLETED'
   const isError = activeStatus?.status === 'ERROR'
 
+  // 種別変更時にnarrativeTypeを自動設定
+  function handleVariantChange(v: ProposalVariant) {
+    setVariant(v)
+    if (narrativeType === 'auto') return
+    // 種別のデフォルト型に合わせてリセット
+    setNarrativeType('auto')
+  }
+
   return (
     <div style={{ minHeight: '100vh', background: 'var(--bg)', display: 'flex', flexDirection: 'column' }}>
 
@@ -185,7 +211,7 @@ export default function ProposalsPage({ params }: { params: Promise<{ id: string
         </div>
       </div>
 
-      <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '320px 1fr', minHeight: 0 }}>
+      <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '340px 1fr', minHeight: 0 }}>
 
         {/* 左: 設定パネル */}
         <div style={{ borderRight: '1px solid var(--line)', overflowY: 'auto', padding: '28px 24px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -199,15 +225,69 @@ export default function ProposalsPage({ params }: { params: Promise<{ id: string
             </div>
           </div>
 
-          {/* 型 */}
+          {/* 提案書名 */}
           <div>
-            <div style={L}>型</div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
-              {PROPOSAL_TYPES.map(t => (
-                <button key={t.value} onClick={() => setProposalType(t.value)} disabled={isRunning}
-                  title={t.desc} style={chip(proposalType === t.value)}>{t.label}</button>
+            <div style={L}>提案書名（任意）</div>
+            <input
+              type="text"
+              value={name}
+              onChange={e => setName(e.target.value)}
+              disabled={isRunning}
+              placeholder="例: 経営層向け戦略提案"
+              style={{ width: '100%', padding: '8px 10px', background: 'var(--bg2)', border: '1px solid var(--line)', borderRadius: '3px', color: 'var(--ink)', fontSize: '12px', fontFamily: 'var(--font-c)', boxSizing: 'border-box' }}
+            />
+          </div>
+
+          {/* 種別 */}
+          <div>
+            <div style={L}>種別</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              {VARIANTS.map(v => (
+                <button key={v.value} onClick={() => handleVariantChange(v.value)} disabled={isRunning}
+                  title={v.desc}
+                  style={{ padding: '8px 12px', textAlign: 'left', display: 'flex', alignItems: 'center', gap: '10px', ...btnBase, ...(variant === v.value ? btnActive : btnInactive) }}>
+                  <span style={{ fontFamily: 'var(--font-d)', fontSize: '11px', fontWeight: 900, minWidth: '60px' }}>{v.label}</span>
+                  <span style={{ fontSize: '10px', opacity: 0.7 }}>{v.desc}</span>
+                </button>
               ))}
             </div>
+          </div>
+
+          {/* スポット対象 */}
+          {variant === 'spot' && (
+            <div>
+              <div style={L}>スポット対象</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', marginBottom: '8px' }}>
+                {SPOT_TARGET_OPTIONS.map(o => (
+                  <button key={o.value} onClick={() => setTargetScope(o.label)} disabled={isRunning}
+                    style={chip(targetScope === o.label)}>{o.label}</button>
+                ))}
+              </div>
+              <input
+                type="text"
+                value={targetScope}
+                onChange={e => setTargetScope(e.target.value)}
+                disabled={isRunning}
+                placeholder="対象ページ・機能を入力"
+                style={{ width: '100%', padding: '7px 10px', background: 'var(--bg2)', border: '1px solid var(--line)', borderRadius: '3px', color: 'var(--ink)', fontSize: '11px', fontFamily: 'var(--font-c)', boxSizing: 'border-box' }}
+              />
+            </div>
+          )}
+
+          {/* 型 */}
+          <div>
+            <div style={L}>型（伝え方）</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
+              {NARRATIVE_TYPES.map(t => (
+                <button key={t.value} onClick={() => setNarrativeType(t.value)} disabled={isRunning}
+                  title={t.desc} style={chip(narrativeType === t.value)}>{t.label}</button>
+              ))}
+            </div>
+            {narrativeType === 'auto' && (
+              <div style={{ fontSize: '10px', color: 'var(--ink3)', marginTop: '5px' }}>
+                推定: {NARRATIVE_LABELS[VARIANT_DEFAULT_NARRATIVE[variant]]}型
+              </div>
+            )}
           </div>
 
           {/* 枚数 */}
@@ -334,21 +414,26 @@ export default function ProposalsPage({ params }: { params: Promise<{ id: string
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                 {generations.map(g => {
                   const isActive = g.id === activeSgId
+                  const label = g.name || `${VARIANT_LABELS[g.variant] ?? g.variant} / ${NARRATIVE_LABELS[g.narrativeType] ?? g.narrativeType}`
                   return (
                     <div key={g.id}
                       onClick={() => { setActiveSgId(g.id); setActiveStatus(null) }}
                       style={{ padding: '14px 16px', background: isActive ? 'var(--bg2)' : 'transparent', border: `1px solid ${isActive ? 'var(--ink3)' : 'var(--line)'}`, borderRadius: '3px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '14px' }}>
-                      {/* ステータスドット */}
                       <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: g.status === 'COMPLETED' ? 'var(--dot-g)' : g.status === 'ERROR' ? 'var(--red)' : g.status === 'RUNNING' ? 'var(--red)' : 'var(--ink4)', flexShrink: 0 }} />
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ display: 'flex', gap: '8px', alignItems: 'baseline' }}>
                           <span style={{ fontFamily: 'var(--font-d)', fontSize: '11px', fontWeight: 700, color: 'var(--ink)' }}>
-                            {TYPE_LABELS[g.proposalType] ?? g.proposalType}
+                            {label}
                           </span>
                           <span style={{ fontFamily: 'var(--font-d)', fontSize: '9px', color: 'var(--ink3)' }}>
                             {TONE_LABELS[g.tone] ?? g.tone} / {g.orientation === 'landscape' ? '横' : '縦'} / {g.slideCount}枚
                           </span>
                         </div>
+                        {g.targetScope && (
+                          <div style={{ fontFamily: 'var(--font-c)', fontSize: '10px', color: 'var(--ink3)', marginTop: '1px' }}>
+                            対象: {g.targetScope}
+                          </div>
+                        )}
                         <div style={{ fontFamily: 'var(--font-c)', fontSize: '10px', color: 'var(--ink3)', marginTop: '2px' }}>
                           {new Date(g.createdAt).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                           {g.status === 'RUNNING' && ` · ${g.currentStep ?? '準備中'}...`}

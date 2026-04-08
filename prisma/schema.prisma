@@ -117,8 +117,15 @@ model SgGeneration {
   versionId    String
   version      ProposalVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
 
+  // 識別用
+  name         String?                               // 提案書名（例: "経営層向け戦略提案"）
+  targetScope  String?                               // スポット型の対象（例: "TOPページ"）
+
   // パラメータ
-  proposalType String          @default("auto")     // insight | data | vision | solution | auto
+  variant      String          @default("full")     // full | strategy | analysis | content | spot
+  narrativeType String         @default("insight")  // insight | data | vision | solution
+  proposalType String          @default("auto")     // 後方互換（非推奨）
+  focusChapters String?                              // 重点章 JSON配列
   tone         String          @default("simple")   // simple | rich | pop
   orientation  String          @default("landscape") // landscape | portrait
   slideCount   Int             @default(25)

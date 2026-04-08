@@ -1,7 +1,7 @@
 import { PrismaClient } from '@prisma/client'
 import { callClaude } from '@/lib/anthropic-client'
 import { loadPrompt } from '@/lib/prompt-loader'
-import { Sg01Output, Sg02Output, Sg04Output, Sg06Output, Slide, ToneType } from './types'
+import { Sg01Output, Sg02Output, Sg04Output, Sg06Output, Slide, ToneType, ProposalVariant, NarrativeType, VARIANT_DEFAULT_NARRATIVE, FOCUS_CHAPTER_MULTIPLIER } from './types'
 import { renderSlides } from './slide-renderer'
 import { generatePdf } from './pdf-generator'
 
@@ -9,7 +9,10 @@ const prisma = new PrismaClient()
 
 export interface SgPipelineInput {
   versionId: string
-  proposalType?: string           // insight | data | vision | solution | auto
+  name?: string                   // 提案書名
+  variant: ProposalVariant        // full | strategy | analysis | content | spot
+  narrativeType?: NarrativeType   // insight | data | vision | solution（未指定時は自動選択）
+  targetScope?: string            // スポット型の対象
   tone: ToneType
   orientation: 'landscape' | 'portrait'
   slideCount: number
@@ -104,6 +107,8 @@ async function runSg01(
     ? `- 重点章（+60%ページ配分）: ${input.focusChapters.join('、')}`
     : ''
 
+  const effectiveNarrative = input.narrativeType ?? VARIANT_DEFAULT_NARRATIVE[input.variant]
+
   const userMessage = `クライアント: ${clientName}
 案件概要: ${briefText}
 
@@ -112,9 +117,11 @@ async function runSg01(
 - 聴衆: ${input.audience}
 - トーン: ${input.tone}
 - 向き: ${input.orientation}
-${input.proposalType && input.proposalType !== 'auto'
-    ? `- 提案書の型（指定）: ${input.proposalType}`
-    : '- 提案書の型: AGの内容から最適な型を自動選択してください'}
+- 種別（variant）: ${input.variant}
+${input.narrativeType
+    ? `- 提案書の型（指定）: ${effectiveNarrative}`
+    : `- 提案書の型（推奨）: ${effectiveNarrative}（AGの内容に応じて最適な型を選択してください）`}
+${input.targetScope ? `- スポット対象: ${input.targetScope}` : ''}
 ${focusNote}
 
 ## AG分析データ
@@ -129,7 +136,7 @@ JSONのみを返してください。`
   if (input.focusChapters && input.focusChapters.length > 0) {
     for (const ch of result.chapters) {
       if (input.focusChapters.includes(ch.id) || input.focusChapters.includes(ch.title)) {
-        ch.pageCount = Math.round(ch.pageCount * 1.6)
+        ch.pageCount = Math.round(ch.pageCount * FOCUS_CHAPTER_MULTIPLIER)
       }
     }
   }
@@ -299,7 +306,11 @@ export async function createSgGeneration(input: SgPipelineInput): Promise<string
   const sg = await prisma.sgGeneration.create({
     data: {
       versionId: input.versionId,
-      proposalType: input.proposalType || 'auto',
+      name: input.name,
+      variant: input.variant,
+      narrativeType: input.narrativeType ?? VARIANT_DEFAULT_NARRATIVE[input.variant],
+      targetScope: input.targetScope,
+      focusChapters: input.focusChapters ? JSON.stringify(input.focusChapters) : null,
       tone: input.tone,
       orientation: input.orientation,
       slideCount: input.slideCount,

@@ -12,15 +12,19 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: 'versionId is required' }, { status: 400 })
   }
 
-  const generations = await prisma.sgGeneration.findMany({
+  const proposals = await prisma.sgGeneration.findMany({
     where: { versionId },
     orderBy: { createdAt: 'desc' },
     select: {
       id: true,
+      name: true,
+      variant: true,
+      narrativeType: true,
+      targetScope: true,
+      focusChapters: true,
       status: true,
       currentStep: true,
       errorMessage: true,
-      proposalType: true,
       tone: true,
       orientation: true,
       slideCount: true,
@@ -29,13 +33,8 @@ export async function GET(req: Request) {
       startedAt: true,
       completedAt: true,
       createdAt: true,
-      sg01Output: false,
-      sg02Output: false,
-      sg04Output: false,
-      sg06Output: false,
-      slidesJson: false,
     },
   })
 
-  return NextResponse.json(generations)
+  return NextResponse.json({ proposals })
 }

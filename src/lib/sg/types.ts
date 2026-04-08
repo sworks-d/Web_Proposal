@@ -1,5 +1,42 @@
-// 提案書の型（4種）
-export type ProposalType = 'insight' | 'data' | 'vision' | 'solution'
+// 種別（何を出力するか）
+export type ProposalVariant = 'full' | 'strategy' | 'analysis' | 'content' | 'spot'
+
+// 型（どう伝えるか） — 旧 ProposalType と同義
+export type NarrativeType = 'insight' | 'data' | 'vision' | 'solution'
+
+// 後方互換エイリアス
+export type ProposalType = NarrativeType
+
+// 種別ごとのデフォルト章構成
+export const VARIANT_CHAPTERS: Record<ProposalVariant, string[]> = {
+  full:     ['課題', '分析', 'ターゲット', 'ジャーニー', 'コンセプト', '設計', 'IA', 'コンテンツ', 'KPI'],
+  strategy: ['課題', 'ターゲット', 'インサイト', 'コンセプト', '実現イメージ'],
+  analysis: ['現状分析', '競合分析', 'ユーザー行動', '課題構造', '方向性'],
+  content:  ['コンテンツ課題', 'ターゲット×コンテンツ', '戦略', 'サイトマップ', 'ページ設計'],
+  spot:     ['問題点', '課題優先順位', '施策一覧', '施策詳細', '期待効果'],
+}
+
+// 種別ごとのデフォルト型
+export const VARIANT_DEFAULT_NARRATIVE: Record<ProposalVariant, NarrativeType> = {
+  full:     'insight',
+  strategy: 'insight',
+  analysis: 'data',
+  content:  'solution',
+  spot:     'solution',
+}
+
+// 重点章のページ配分倍率（+60%）
+export const FOCUS_CHAPTER_MULTIPLIER = 1.6
+
+// スポット対象の選択肢
+export const SPOT_TARGET_OPTIONS = [
+  { value: 'top',        label: 'TOPページ',    agSources: ['AG-07C-1', 'AG-02-STP', 'AG-04-INSIGHT'] },
+  { value: 'list',       label: '一覧ページ',   agSources: ['AG-07C-2', 'AG-02-JOURNEY'] },
+  { value: 'detail',     label: '詳細ページ',   agSources: ['AG-07C-3', 'AG-02-JOURNEY'] },
+  { value: 'cv-flow',    label: 'CVフロー',      agSources: ['AG-07C-4', 'AG-04-INSIGHT'] },
+  { value: 'navigation', label: 'ナビゲーション', agSources: ['AG-07C-1', 'AG-02-JOURNEY'] },
+  { value: 'other',      label: 'その他',        agSources: [] },
+]
 
 // トーン（3種）
 export type ToneType = 'simple' | 'rich' | 'pop'
