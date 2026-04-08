@@ -13,7 +13,7 @@ export abstract class SgBaseAgent {
   async run(input: SgInput): Promise<unknown> {
     const system = this.getSystemPrompt()
     const user = this.buildUserMessage(input)
-    const raw = await callClaude(system, user, { modelType: this.modelType, maxTokens: this.maxTokens })
+    const raw = await callClaude(system, user, { modelType: this.modelType, maxTokens: this.maxTokens, agentId: this.id })
     return this.parseResponse(raw)
   }
 
@@ -64,10 +64,21 @@ export abstract class SgBaseAgent {
     }
   }
 
-  protected formatAgOutputs(agOutputs: Record<string, unknown>, keys: string[]): string {
+  protected formatAgOutputs(
+    agOutputs: Record<string, unknown>,
+    keys: string[],
+    maxPerKey = 6000
+  ): string {
     return keys
       .filter(k => agOutputs[k])
-      .map(k => `=== ${k} ===\n${JSON.stringify(agOutputs[k], null, 2).slice(0, 3000)}`)
+      .map(k => {
+        const pretty = JSON.stringify(agOutputs[k], null, 2)
+        // 上限以内ならそのまま、超えたらインデント無しで圧縮して切る
+        const content = pretty.length <= maxPerKey
+          ? pretty
+          : JSON.stringify(agOutputs[k]).slice(0, maxPerKey)
+        return `=== ${k} ===\n${content}`
+      })
       .join('\n\n')
   }
 }

@@ -59,6 +59,7 @@ export abstract class BaseAgent {
     this.lastRawText = await callClaude(system, user, {
       modelType: this.modelType,
       maxTokens,
+      agentId: this.id,
     })
     return this.parseOutput(this.lastRawText)
   }

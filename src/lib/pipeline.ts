@@ -1,6 +1,7 @@
 import { PrismaClient } from '@prisma/client'
 import { AgentInput, AgentOutput, AgentId, PipelineConfig } from '@/agents/types'
 import { safeParseJson } from '@/lib/json-cleaner'
+import { startCostTracking, endCostTracking } from '@/lib/cost-tracker'
 import { IntakeAgent } from '@/agents/ag-01-intake'
 import { Ag01ResearchAgent } from '@/agents/ag-01-research'
 import { Ag01MergeAgent } from '@/agents/ag-01-merge'

@@ -5,7 +5,7 @@ export class Sg04Agent extends SgBaseAgent {
   id: SgAgentId = 'SG-04'
   name = '本文生成'
   protected modelType = 'quality' as const
-  protected maxTokens = 4096  // 1チャプター分に絞る
+  protected maxTokens = 8192  // チャプター分割実行でも十分な出力量を確保
 
   getSystemPrompt(): string {
     return `あなたは提案書の本文ライターです。
@@ -92,14 +92,14 @@ ${agContext || '（分析データなし）'}
         allSlides.push(...result.slides)
       } catch (err) {
         console.error(`SG-04 chapter ${chapter.id} failed:`, err)
-        // チャプター失敗時はスロットのデフォルトで埋める
+        // チャプター失敗時は明示的に失敗マークを付ける
         for (const slot of chapter.slots) {
           allSlides.push({
             slotId: slot.id,
             chapterId: chapter.id,
-            title: slot.role,
-            body: [slot.purpose],
-            notes: '',
+            title: `[生成失敗] ${slot.role}`,
+            body: [`※ このスライドはAIによる本文生成に失敗しました。手動での記入が必要です。`, `目的: ${slot.purpose}`],
+            notes: `生成エラー: ${err instanceof Error ? err.message : String(err)}`,
           })
         }
       }
@@ -112,7 +112,8 @@ ${agContext || '（分析データなし）'}
     const system = this.getSystemPrompt()
     const user = this.buildUserMessage(input)
     const { callClaude } = await import('@/lib/anthropic-client')
-    const raw = await callClaude(system, user, { modelType: this.modelType, maxTokens: this.maxTokens })
+    const chapterId = input._chapter?.id ?? '?'
+    const raw = await callClaude(system, user, { modelType: this.modelType, maxTokens: this.maxTokens, agentId: `SG-04:${chapterId}` })
     return this.parseResponse(raw) as Sg04Output
   }
 }

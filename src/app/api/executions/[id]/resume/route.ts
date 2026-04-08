@@ -5,6 +5,7 @@ import { safeParseJson } from '@/lib/json-cleaner'
 import { detectFeedbackTarget, extractAG05Targets } from '@/lib/auto-feedback'
 import { PipelineConfig, ProjectContext, AgentOutput, AgentId } from '@/agents/types'
 import { isStopRequested, clearStop, clearStopAll } from '@/lib/execution-control'
+import { startCostTracking, endCostTracking, BudgetExceededError } from '@/lib/cost-tracker'
 
 export const maxDuration = 600 // 10分
 
@@ -98,6 +99,9 @@ export async function POST(
     : 0
 
   await setVersionStatus(versionId, 'RUNNING')
+
+  // ── コスト追跡開始 ──
+  const costTracker = startCostTracking('AG')
 
   const encoder = new TextEncoder()
   const stream = new ReadableStream({
@@ -392,14 +396,24 @@ export async function POST(
 
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'Unknown error'
+        const costSummary = endCostTracking()
+        const costInfo = costSummary ? ` [累計コスト: $${costSummary.totalCost.toFixed(2)}]` : ''
         if (msg === 'STOP_REQUESTED') {
           await setVersionStatus(versionId, 'ERROR')
-          send({ type: 'error', message: '実行を停止しました。「失敗箇所から再開」でここから続けられます。' })
+          send({ type: 'error', message: `実行を停止しました。「失敗箇所から再開」でここから続けられます。${costInfo}` })
+        } else if (err instanceof BudgetExceededError) {
+          await setVersionStatus(versionId, 'ERROR')
+          send({ type: 'error', message: `⚠️ APIコスト上限に到達しました（$${err.currentCost.toFixed(2)} / 上限$${err.budgetLimit.toFixed(2)}）。処理を中断しました。` })
         } else {
           await setVersionStatus(versionId, 'ERROR')
-          send({ type: 'error', message: msg })
+          send({ type: 'error', message: msg + costInfo })
         }
       } finally {
+        // 正常完了時もコスト追跡を終了
+        const remaining = endCostTracking()
+        if (remaining) {
+          send({ type: 'cost_summary', totalCost: remaining.totalCost, callCount: remaining.callCount })
+        }
         clearStop(versionId)
         controller.close()
       }

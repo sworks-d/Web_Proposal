@@ -4,7 +4,7 @@ import { SgInput, SgFinalOutput, Sg01Output, Sg02Output, Sg03Output, Sg04Output,
 export class Sg06Agent extends SgBaseAgent {
   id: SgAgentId = 'SG-06'
   name = 'スタイル適用・最終出力'
-  protected modelType = 'fast' as const
+  protected modelType = 'quality' as const  // Haiku→Sonnet: 空データの補完力が必要
   protected maxTokens = 8192
 
   getSystemPrompt(): string {

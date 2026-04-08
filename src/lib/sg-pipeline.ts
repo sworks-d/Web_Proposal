@@ -7,6 +7,7 @@ import { Sg04Agent } from '@/agents/sg-04'
 import { Sg05Agent } from '@/agents/sg-05'
 import { Sg06Agent } from '@/agents/sg-06'
 import { safeParseJson } from '@/lib/json-cleaner'
+import { startCostTracking, endCostTracking, BudgetExceededError } from '@/lib/cost-tracker'
 
 const prisma = new PrismaClient()
 
@@ -37,6 +38,9 @@ export async function runSgPipeline(
 ): Promise<SgPipelineResult> {
   const generation = await prisma.sgGeneration.findUnique({ where: { id: generationId } })
   if (!generation) throw new Error(`SgGeneration ${generationId} not found`)
+
+  // ── コスト追跡開始 ──
+  const costTracker = startCostTracking('SG')
 
   // 既存の出力を復元（再開時）
   const sgOutputs: Partial<Record<SgAgentId, unknown>> = {}
@@ -92,17 +96,24 @@ export async function runSgPipeline(
         data: { [OUTPUT_COLUMN[agent.id]]: JSON.stringify(output) },
       })
     } catch (err) {
+      const costSummary = endCostTracking()
+      const isBudgetError = err instanceof BudgetExceededError
       await prisma.sgGeneration.update({
         where: { id: generationId },
         data: {
           status: 'ERROR',
-          errorMessage: err instanceof Error ? err.message : String(err),
+          errorMessage: (isBudgetError ? '[BUDGET超過] ' : '') +
+            (err instanceof Error ? err.message : String(err)) +
+            (costSummary ? ` (累計コスト: $${costSummary.totalCost.toFixed(2)})` : ''),
           completedAt: new Date(),
         },
       }).catch(() => {})
       throw err
     }
   }
+
+  // ── コスト追跡終了 ──
+  const costSummary = endCostTracking()
 
   await prisma.sgGeneration.update({
     where: { id: generationId },
