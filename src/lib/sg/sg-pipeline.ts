@@ -210,7 +210,8 @@ JSONのみを返してください。`
   const raw = await callClaude(systemPrompt, userMessage, { modelType: 'quality', maxTokens: 4096 })
   const result = parseJson<Sg04Output>(raw, `SG-04:${chapter.id}`)
 
-  return result.slides.map((s, i) => ({
+  const slides = Array.isArray(result?.slides) ? result.slides : []
+  return slides.map((s, i) => ({
     ...s,
     slideNumber: startSlideNumber + i,
     chapterId: chapter.id,
@@ -256,11 +257,23 @@ ${agContext || '（AGデータなし）'}
 JSONのみを返してください。`
 
   const raw = await callClaude(systemPrompt, userMessage, { modelType: 'quality', maxTokens: 8192 })
-  return parseJson<Sg06Output>(raw, 'SG-06')
+  try {
+    const parsed = parseJson<Sg06Output>(raw, 'SG-06')
+    // enhancementsが配列でない場合の防御
+    if (!Array.isArray(parsed?.enhancements)) {
+      console.warn('[SG-06] enhancements is not array, skipping visual enhancement')
+      return { enhancements: [] }
+    }
+    return parsed
+  } catch (err) {
+    console.warn('[SG-06] parse failed, skipping visual enhancement:', err)
+    return { enhancements: [] }
+  }
 }
 
 function applyEnhancements(slides: Slide[], sg06Output: Sg06Output): Slide[] {
-  const enhancementMap = new Map(sg06Output.enhancements.map(e => [e.slideNumber, e]))
+  const enhancements = sg06Output.enhancements ?? []
+  const enhancementMap = new Map(enhancements.map(e => [e.slideNumber, e]))
 
   return slides.map(slide => {
     const enhancement = enhancementMap.get(slide.slideNumber)

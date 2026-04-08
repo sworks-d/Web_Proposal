@@ -297,6 +297,13 @@ function esc(str: unknown): string {
     .replace(/"/g, '&quot;')
 }
 
+// SG-04がbodyを文字列で返すケースをarray化
+function toBodyArr(body: unknown): string[] {
+  if (!body) return []
+  if (Array.isArray(body)) return body.map(String)
+  return [String(body)]
+}
+
 function renderChartCanvas(chartConfig: ChartJsConfig, width: number, height: number): string {
   const id = `chart-${++chartIndex}`
   const configJson = esc(JSON.stringify(chartConfig))
@@ -325,6 +332,10 @@ function renderWireframe(areas: WireframeArea[] | undefined, visualData: unknown
   return `<div class="wireframe-container">${areaHtml}</div>`
 }
 
+function safeObj(v: unknown): Record<string, unknown> {
+  return (v && typeof v === 'object' && !Array.isArray(v)) ? v as Record<string, unknown> : {}
+}
+
 function renderVisual(slide: Slide, theme: Theme): string {
   if (!slide.visual) return ''
   const { type, data, caption, chartConfig, wireframeAreas } = slide.visual
@@ -335,20 +346,20 @@ function renderVisual(slide: Slide, theme: Theme): string {
     if (chartConfig) {
       content = `<div class="chart-wrapper">${renderChartCanvas(chartConfig, 400, 260)}</div>`
     } else {
-      // chartConfigがない場合はプレースホルダー
       content = `<div style="background:${theme.bgAlt};border-radius:6px;padding:20px;text-align:center;color:${theme.textSub};font-size:12px;">グラフ生成中...</div>`
     }
   } else if (type === 'table') {
-    const d = (data as { headers?: string[]; rows?: string[][] }) ?? {}
-    const tableData = chartConfig ? (data as { headers: string[]; rows: string[][] }) : d
-    const headers = (tableData.headers ?? []).map(h => `<th>${esc(h)}</th>`).join('')
-    const rows = (tableData.rows ?? []).map(row =>
-      `<tr>${row.map(cell => `<td>${esc(cell)}</td>`).join('')}</tr>`
+    const d = safeObj(data) as { headers?: string[]; rows?: string[][] }
+    const headers = (d.headers ?? []).map(h => `<th>${esc(h)}</th>`).join('')
+    const rows = (d.rows ?? []).map(row =>
+      `<tr>${(Array.isArray(row) ? row : []).map(cell => `<td>${esc(cell)}</td>`).join('')}</tr>`
     ).join('')
     content = `<div style="overflow-x:auto;"><table class="data-table"><thead><tr>${headers}</tr></thead><tbody>${rows}</tbody></table></div>`
   } else if (type === 'flow') {
-    const d = data as { steps?: { label: string; sublabel?: string }[] }
-    const steps = (d.steps ?? []).map((s, i) =>
+    const d = safeObj(data) as { steps?: { label: string; sublabel?: string }[]; nodes?: { label: string; description?: string }[] }
+    // stepsかnodesどちらでも受け取れるよう対応
+    const rawSteps = Array.isArray(d.steps) ? d.steps : Array.isArray(d.nodes) ? d.nodes.map(n => ({ label: n.label, sublabel: n.description })) : []
+    const steps = rawSteps.map((s, i) =>
       `<div class="flow-step">
         <div class="flow-step-num">${i + 1}</div>
         <div>
@@ -357,9 +368,9 @@ function renderVisual(slide: Slide, theme: Theme): string {
         </div>
       </div>`
     ).join('')
-    content = `<div class="flow-steps">${steps}</div>`
+    content = `<div class="flow-steps">${steps || '<div style="color:#999;font-size:12px;">データなし</div>'}</div>`
   } else if (type === 'number') {
-    const d = data as { value?: string; unit?: string; description?: string }
+    const d = safeObj(data) as { value?: string; unit?: string; description?: string }
     content = `<div style="text-align:center;padding:16px 0;">
       <span class="metrics-value">${esc(d.value)}</span><span class="metrics-unit">${esc(d.unit ?? '')}</span>
       ${d.description ? `<div style="font-size:${theme.bodySize};color:${theme.textSub};margin-top:12px;">${esc(d.description)}</div>` : ''}
@@ -367,8 +378,8 @@ function renderVisual(slide: Slide, theme: Theme): string {
   } else if (type === 'wireframe') {
     content = renderWireframe(wireframeAreas, data)
   } else if (type === 'matrix') {
-    const d = data as { xLabel?: string; yLabel?: string; items?: { x: number; y: number; label: string }[] }
-    const items = (d.items ?? []).map(item =>
+    const d = safeObj(data) as { xLabel?: string; yLabel?: string; items?: { x: number; y: number; label: string }[] }
+    const items = (Array.isArray(d.items) ? d.items : []).map(item =>
       `<div style="position:absolute;left:${item.x}%;bottom:${item.y}%;transform:translate(-50%,50%);background:${theme.accent};color:#fff;padding:3px 7px;border-radius:3px;font-size:10px;white-space:nowrap;">${esc(item.label)}</div>`
     ).join('')
     content = `<div style="position:relative;height:200px;border-left:2px solid ${theme.textSub};border-bottom:2px solid ${theme.textSub};margin:12px 24px 24px 24px;">
@@ -396,7 +407,7 @@ function renderSlide(slide: Slide, theme: Theme, width: number, height: number):
     <div class="accent-bar"></div>
     <div class="cover-title">${esc(slide.headline)}</div>
     ${slide.subheadline ? `<div class="cover-sub">${esc(slide.subheadline)}</div>` : ''}
-    ${(slide.body ?? []).map(b => `<p style="font-size:${theme.bodySize};color:${theme.textSub};margin-top:8px;">${esc(b)}</p>`).join('')}
+    ${toBodyArr(slide.body).map(b => `<p style="font-size:${theme.bodySize};color:${theme.textSub};margin-top:8px;">${esc(b)}</p>`).join('')}
   </div>
   ${num}
 </div>`
@@ -417,7 +428,7 @@ function renderSlide(slide: Slide, theme: Theme, width: number, height: number):
   <div class="headline">${esc(slide.headline)}</div>
   ${slide.subheadline ? `<div class="subheadline">${esc(slide.subheadline)}</div>` : ''}
   <div class="body-text">
-    ${(slide.body ?? []).map(b => `<p>${esc(b)}</p>`).join('')}
+    ${toBodyArr(slide.body).map(b => `<p>${esc(b)}</p>`).join('')}
   </div>
   ${num}
 </div>`
@@ -429,7 +440,7 @@ function renderSlide(slide: Slide, theme: Theme, width: number, height: number):
     <div class="split-left">
       ${slide.subheadline ? `<div class="subheadline">${esc(slide.subheadline)}</div>` : ''}
       <div class="body-text">
-        ${(slide.body ?? []).map(b => `<p>${esc(b)}</p>`).join('')}
+        ${toBodyArr(slide.body).map(b => `<p>${esc(b)}</p>`).join('')}
       </div>
     </div>
     <div class="split-right">
@@ -505,7 +516,7 @@ function renderSlide(slide: Slide, theme: Theme, width: number, height: number):
     </div>
     ${d.description ? `<div style="font-size:${theme.bodySize};color:${theme.textSub};margin-top:16px;">${esc(d.description)}</div>` : ''}
     ` : renderVisual(slide, theme)}
-    ${(slide.body ?? []).map(b => `<p style="font-size:${theme.bodySize};color:${theme.textSub};margin-top:10px;">${esc(b)}</p>`).join('')}
+    ${toBodyArr(slide.body).map(b => `<p style="font-size:${theme.bodySize};color:${theme.textSub};margin-top:10px;">${esc(b)}</p>`).join('')}
   </div>
   ${num}
 </div>`
@@ -517,7 +528,7 @@ function renderSlide(slide: Slide, theme: Theme, width: number, height: number):
     <div class="quote-mark">"</div>
     <div class="quote-text">${esc(slide.headline)}</div>
     ${slide.subheadline ? `<div style="font-size:${theme.bodySize};color:${theme.textSub};margin-top:18px;">— ${esc(slide.subheadline)}</div>` : ''}
-    ${(slide.body ?? []).map(b => `<p style="font-size:${theme.bodySize};color:${theme.textSub};margin-top:10px;">${esc(b)}</p>`).join('')}
+    ${toBodyArr(slide.body).map(b => `<p style="font-size:${theme.bodySize};color:${theme.textSub};margin-top:10px;">${esc(b)}</p>`).join('')}
   </div>
   ${num}
 </div>`
@@ -528,7 +539,7 @@ function renderSlide(slide: Slide, theme: Theme, width: number, height: number):
   <div class="headline">${esc(slide.headline)}</div>
   ${slide.subheadline ? `<div class="subheadline">${esc(slide.subheadline)}</div>` : ''}
   <div class="body-text">
-    ${(slide.body ?? []).map(b => `<p>${esc(b)}</p>`).join('')}
+    ${toBodyArr(slide.body).map(b => `<p>${esc(b)}</p>`).join('')}
   </div>
   ${num}
 </div>`
