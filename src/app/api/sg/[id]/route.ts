@@ -35,6 +35,7 @@ export async function GET(
       'SG-01': !!sg.sg01Output,
       'SG-02': !!sg.sg02Output,
       'SG-04': !!sg.sg04Output,
+      'SG-06': !!sg.sg06Output,
       slides: !!sg.slidesJson,
       pdf: !!sg.pdfPath,
     },

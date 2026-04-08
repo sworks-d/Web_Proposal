@@ -702,7 +702,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
             {currentVersionId && appStatus === 'completed' && (
               <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
                 <button
-                  onClick={() => router.push(`/projects/${id}/slides`)}
+                  onClick={() => router.push(`/projects/${id}/proposals`)}
                   style={{ background: 'var(--red)', color: '#fff', fontFamily: 'var(--font-d)', fontSize: '8px', fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', padding: '8px 16px', border: 'none', cursor: 'pointer', borderRadius: '2px' }}
                 >
                   提案書を作成する →

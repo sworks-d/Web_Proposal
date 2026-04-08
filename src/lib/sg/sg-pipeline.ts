@@ -1,7 +1,7 @@
 import { PrismaClient } from '@prisma/client'
 import { callClaude } from '@/lib/anthropic-client'
 import { loadPrompt } from '@/lib/prompt-loader'
-import { Sg01Output, Sg02Output, Sg04Output, Slide, ToneType } from './types'
+import { Sg01Output, Sg02Output, Sg04Output, Sg06Output, Slide, ToneType } from './types'
 import { renderSlides } from './slide-renderer'
 import { generatePdf } from './pdf-generator'
 
@@ -9,11 +9,12 @@ const prisma = new PrismaClient()
 
 export interface SgPipelineInput {
   versionId: string
-  proposalType?: string
+  proposalType?: string           // insight | data | vision | solution | auto
   tone: ToneType
   orientation: 'landscape' | 'portrait'
   slideCount: number
   audience: 'executive' | 'manager' | 'creative'
+  focusChapters?: string[]        // 重点章ID（+60%ページ配分）
 }
 
 async function updateStep(sgId: string, step: string) {
@@ -93,11 +94,15 @@ async function runSg01(
   clientName: string,
   briefText: string,
 ): Promise<Sg01Output> {
-  const systemPrompt = await loadPrompt('sg-01-structure')
+  const systemPrompt = loadPrompt('sg-01-structure')
   const agContext = formatAgOutputs(agOutputs, [
     'AG-01-MERGE', 'AG-02-STP', 'AG-02-JOURNEY', 'AG-03-GAP', 'AG-03-COMPETITOR',
     'AG-04-MAIN', 'AG-04-INSIGHT', 'AG-06',
   ])
+
+  const focusNote = input.focusChapters && input.focusChapters.length > 0
+    ? `- 重点章（+60%ページ配分）: ${input.focusChapters.join('、')}`
+    : ''
 
   const userMessage = `クライアント: ${clientName}
 案件概要: ${briefText}
@@ -107,7 +112,10 @@ async function runSg01(
 - 聴衆: ${input.audience}
 - トーン: ${input.tone}
 - 向き: ${input.orientation}
-${input.proposalType && input.proposalType !== 'auto' ? `- 提案書の型（指定）: ${input.proposalType}` : '- 提案書の型: AGの内容から最適な型を自動選択してください'}
+${input.proposalType && input.proposalType !== 'auto'
+    ? `- 提案書の型（指定）: ${input.proposalType}`
+    : '- 提案書の型: AGの内容から最適な型を自動選択してください'}
+${focusNote}
 
 ## AG分析データ
 ${agContext || '（分析データなし）'}
@@ -115,7 +123,18 @@ ${agContext || '（分析データなし）'}
 JSONのみを返してください。`
 
   const raw = await callClaude(systemPrompt, userMessage, { modelType: 'quality', maxTokens: 4096 })
-  return parseJson<Sg01Output>(raw, 'SG-01')
+  const result = parseJson<Sg01Output>(raw, 'SG-01')
+
+  // 重点章のページ数を+60%調整
+  if (input.focusChapters && input.focusChapters.length > 0) {
+    for (const ch of result.chapters) {
+      if (input.focusChapters.includes(ch.id) || input.focusChapters.includes(ch.title)) {
+        ch.pageCount = Math.round(ch.pageCount * 1.6)
+      }
+    }
+  }
+
+  return result
 }
 
 async function runSg02(
@@ -124,7 +143,7 @@ async function runSg02(
   clientName: string,
   briefText: string,
 ): Promise<Sg02Output> {
-  const systemPrompt = await loadPrompt('sg-02-narrative')
+  const systemPrompt = loadPrompt('sg-02-narrative')
   const agContext = formatAgOutputs(agOutputs, [
     'AG-01-MERGE', 'AG-02-STP', 'AG-02-JOURNEY', 'AG-03-GAP', 'AG-03-COMPETITOR',
     'AG-04-MAIN', 'AG-04-INSIGHT',
@@ -141,6 +160,7 @@ ${agContext || '（分析データなし）'}
 
 JSONのみを返してください。`
 
+  // SG-02はOpus（最重要）
   const raw = await callClaude(systemPrompt, userMessage, { modelType: 'premium', maxTokens: 8192 })
   return parseJson<Sg02Output>(raw, 'SG-02')
 }
@@ -153,7 +173,7 @@ async function runSg04Chapter(
   startSlideNumber: number,
   input: SgPipelineInput,
 ): Promise<Slide[]> {
-  const systemPrompt = await loadPrompt('sg-04-content')
+  const systemPrompt = loadPrompt('sg-04-content')
   const chapterCopy = sg02Output.chapterCopies.find(c => c.chapterId === chapter.id)
   const agContext = formatAgOutputs(agOutputs, chapter.agSources)
 
@@ -190,7 +210,6 @@ JSONのみを返してください。`
   const raw = await callClaude(systemPrompt, userMessage, { modelType: 'quality', maxTokens: 4096 })
   const result = parseJson<Sg04Output>(raw, `SG-04:${chapter.id}`)
 
-  // slideNumberをグローバル通番に変換
   return result.slides.map((s, i) => ({
     ...s,
     slideNumber: startSlideNumber + i,
@@ -198,7 +217,71 @@ JSONのみを返してください。`
   }))
 }
 
-// SgGenerationレコードを作成してIDを返す（API routeからcall）
+async function runSg06(
+  agOutputs: Record<string, unknown>,
+  slides: Slide[],
+): Promise<Sg06Output> {
+  // ビジュアルが必要なスライドのみ抽出
+  const visualSlides = slides.filter(s =>
+    s.visual?.type === 'chart' || s.visual?.type === 'table' || s.visual?.type === 'wireframe'
+  )
+
+  if (visualSlides.length === 0) {
+    return { enhancements: [] }
+  }
+
+  const systemPrompt = loadPrompt('sg-06-visual')
+  const agContext = formatAgOutputs(agOutputs, [
+    'AG-02-STP', 'AG-02-JOURNEY', 'AG-03-GAP', 'AG-03-COMPETITOR',
+    'AG-04-INSIGHT', 'AG-07C-1', 'AG-07C-2', 'AG-07C-3',
+  ])
+
+  const slideDescriptions = visualSlides.map(s => ({
+    slideNumber: s.slideNumber,
+    type: s.type,
+    headline: s.headline,
+    visualType: s.visual?.type,
+    visualData: s.visual?.data,
+    role: s.role,
+    agSources: s.agSources,
+  }))
+
+  const userMessage = `## ビジュアル強化が必要なスライド一覧
+${JSON.stringify(slideDescriptions, null, 2)}
+
+## AGデータ（参照用）
+${agContext || '（AGデータなし）'}
+
+各スライドのビジュアルタイプに応じて、実際に描画できるデータを生成してください。
+JSONのみを返してください。`
+
+  const raw = await callClaude(systemPrompt, userMessage, { modelType: 'quality', maxTokens: 8192 })
+  return parseJson<Sg06Output>(raw, 'SG-06')
+}
+
+function applyEnhancements(slides: Slide[], sg06Output: Sg06Output): Slide[] {
+  const enhancementMap = new Map(sg06Output.enhancements.map(e => [e.slideNumber, e]))
+
+  return slides.map(slide => {
+    const enhancement = enhancementMap.get(slide.slideNumber)
+    if (!enhancement || !slide.visual) return slide
+
+    const updatedVisual = { ...slide.visual }
+    if (enhancement.chartConfig) {
+      updatedVisual.chartConfig = enhancement.chartConfig
+    }
+    if (enhancement.tableData) {
+      updatedVisual.data = enhancement.tableData
+    }
+    if (enhancement.wireframeAreas) {
+      updatedVisual.wireframeAreas = enhancement.wireframeAreas
+    }
+
+    return { ...slide, visual: updatedVisual }
+  })
+}
+
+// SgGenerationレコードを作成してIDを返す
 export async function createSgGeneration(input: SgPipelineInput): Promise<string> {
   const sg = await prisma.sgGeneration.create({
     data: {
@@ -217,7 +300,6 @@ export async function createSgGeneration(input: SgPipelineInput): Promise<string
 
 // パイプライン実行（バックグラウンドで呼び出す）
 export async function executeSgPipeline(sgId: string, input: SgPipelineInput): Promise<void> {
-  // バージョン情報を取得
   const version = await prisma.proposalVersion.findUnique({
     where: { id: input.versionId },
     include: { project: { include: { client: true } } },
@@ -226,30 +308,28 @@ export async function executeSgPipeline(sgId: string, input: SgPipelineInput): P
 
   const clientName = version.project.client.name
   const briefText = version.project.briefText
-  const sg = { id: sgId }
 
   try {
-    // AG出力を取得
     const agOutputs = await getAgOutputs(input.versionId)
 
     // SG-01: 構成設計
-    await updateStep(sg.id, 'SG-01')
+    await updateStep(sgId, 'SG-01')
     const sg01Output = await runSg01(agOutputs, input, clientName, briefText)
     await prisma.sgGeneration.update({
-      where: { id: sg.id },
+      where: { id: sgId },
       data: { sg01Output: JSON.stringify(sg01Output) },
     })
 
     // SG-02: ナラティブ設計（Opus）
-    await updateStep(sg.id, 'SG-02')
+    await updateStep(sgId, 'SG-02')
     const sg02Output = await runSg02(agOutputs, sg01Output, clientName, briefText)
     await prisma.sgGeneration.update({
-      where: { id: sg.id },
+      where: { id: sgId },
       data: { sg02Output: JSON.stringify(sg02Output) },
     })
 
     // SG-04: 本文生成（チャプター分割）
-    await updateStep(sg.id, 'SG-04')
+    await updateStep(sgId, 'SG-04')
     const allSlides: Slide[] = []
     let slideCounter = 1
 
@@ -262,23 +342,34 @@ export async function executeSgPipeline(sgId: string, input: SgPipelineInput): P
     }
 
     await prisma.sgGeneration.update({
-      where: { id: sg.id },
+      where: { id: sgId },
       data: { sg04Output: JSON.stringify({ slides: allSlides }) },
     })
 
+    // SG-06: ビジュアル生成
+    await updateStep(sgId, 'SG-06')
+    const sg06Output = await runSg06(agOutputs, allSlides)
+    await prisma.sgGeneration.update({
+      where: { id: sgId },
+      data: { sg06Output: JSON.stringify(sg06Output) },
+    })
+
+    // SG-06強化を適用
+    const enhancedSlides = applyEnhancements(allSlides, sg06Output)
+
     // HTMLレンダリング
-    await updateStep(sg.id, 'RENDERING')
-    const slidesHtml = renderSlides(allSlides, input.tone, input.orientation)
+    await updateStep(sgId, 'RENDERING')
+    const slidesHtml = renderSlides(enhancedSlides, input.tone, input.orientation)
 
     // PDF生成
-    await updateStep(sg.id, 'PDF')
-    const pdfPath = await generatePdf(slidesHtml, sg.id, input.orientation)
+    await updateStep(sgId, 'PDF')
+    const pdfPath = await generatePdf(slidesHtml, sgId, input.orientation)
 
     // 完了
     await prisma.sgGeneration.update({
-      where: { id: sg.id },
+      where: { id: sgId },
       data: {
-        slidesJson: JSON.stringify(allSlides),
+        slidesJson: JSON.stringify(enhancedSlides),
         pdfPath,
         status: 'COMPLETED',
         completedAt: new Date(),
@@ -287,7 +378,7 @@ export async function executeSgPipeline(sgId: string, input: SgPipelineInput): P
     })
   } catch (error) {
     await prisma.sgGeneration.update({
-      where: { id: sg.id },
+      where: { id: sgId },
       data: {
         status: 'ERROR',
         errorMessage: error instanceof Error ? error.message : String(error),

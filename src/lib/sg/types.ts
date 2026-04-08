@@ -16,7 +16,7 @@ export type SlideRole =
   | 'reassure'  // 安心させる
   | 'decide'    // 決断を促す
 
-// スライドタイプ（12種）
+// スライドタイプ
 export type SlideType =
   | 'cover'
   | 'chapter-title'
@@ -30,6 +30,39 @@ export type SlideType =
   | 'metrics-hero'
   | 'quote'
   | 'roadmap'
+
+// chart.js設定
+export interface ChartJsConfig {
+  type: 'bar' | 'line' | 'pie' | 'doughnut' | 'radar'
+  data: {
+    labels: string[]
+    datasets: {
+      label: string
+      data: number[]
+      backgroundColor?: string | string[]
+      borderColor?: string | string[]
+      borderWidth?: number
+    }[]
+  }
+  options?: {
+    responsive?: boolean
+    maintainAspectRatio?: boolean
+    plugins?: { legend?: unknown; title?: { display?: boolean; text?: string } }
+    scales?: Record<string, unknown>
+    [key: string]: unknown
+  }
+}
+
+// ワイヤーフレームエリア
+export interface WireframeArea {
+  id: string
+  label: string
+  x: number       // left % (0-100)
+  y: number       // top % (0-100)
+  w: number       // width % (0-100)
+  h: number       // height % (0-100)
+  description?: string  // 指示テキスト
+}
 
 // 章の定義
 export interface Chapter {
@@ -95,6 +128,8 @@ export interface Slide {
   visual?: {
     type: 'wireframe' | 'flow' | 'table' | 'matrix' | 'chart' | 'number'
     data: unknown
+    chartConfig?: ChartJsConfig   // SG-06が生成
+    wireframeAreas?: WireframeArea[] // SG-06が生成
     caption?: string
   }
   blocks?: {
@@ -109,6 +144,18 @@ export interface Slide {
 // SG-04の出力
 export interface Sg04Output {
   slides: Slide[]
+}
+
+// SG-06の出力（ビジュアル強化）
+export interface Sg06Enhancement {
+  slideNumber: number
+  chartConfig?: ChartJsConfig
+  tableData?: { headers: string[]; rows: string[][] }
+  wireframeAreas?: WireframeArea[]
+}
+
+export interface Sg06Output {
+  enhancements: Sg06Enhancement[]
 }
 
 // テーマ
@@ -138,9 +185,9 @@ export const THEMES: Record<ToneType, Theme> = {
     fontTitle: '"Helvetica Neue", "Hiragino Sans", sans-serif',
     fontBody: '"Helvetica Neue", "Hiragino Sans", sans-serif',
     titleSize: '48px',
-    headingSize: '32px',
-    bodySize: '16px',
-    pagePadding: '80px',
+    headingSize: '28px',
+    bodySize: '14px',
+    pagePadding: '64px',
   },
   rich: {
     bg: '#1A1A1A',
@@ -151,9 +198,9 @@ export const THEMES: Record<ToneType, Theme> = {
     fontTitle: '"Georgia", "Hiragino Mincho ProN", serif',
     fontBody: '"Hiragino Sans", sans-serif',
     titleSize: '40px',
-    headingSize: '28px',
-    bodySize: '14px',
-    pagePadding: '60px',
+    headingSize: '24px',
+    bodySize: '13px',
+    pagePadding: '56px',
   },
   pop: {
     bg: '#FFFFFF',
@@ -165,8 +212,14 @@ export const THEMES: Record<ToneType, Theme> = {
     fontTitle: '"Rounded Mplus 1c", "Hiragino Sans", sans-serif',
     fontBody: '"Hiragino Sans", sans-serif',
     titleSize: '44px',
-    headingSize: '30px',
-    bodySize: '15px',
-    pagePadding: '48px',
+    headingSize: '26px',
+    bodySize: '13px',
+    pagePadding: '52px',
   },
 }
+
+// A4サイズ定数
+export const A4 = {
+  landscape: { width: 1123, height: 794 },
+  portrait:  { width: 794,  height: 1123 },
+} as const
