@@ -79,9 +79,9 @@ const AGENT_TIMEOUTS: Record<string, number> = {
   'AG-03-DATA':       120_000,
   'AG-03-MERGE':      120_000,
   'AG-04':             60_000,
-  'AG-04-MAIN':       150_000,
-  'AG-04-INSIGHT':    150_000,
-  'AG-04-MERGE':      120_000,
+  'AG-04-MAIN':       180_000,
+  'AG-04-INSIGHT':    300_000,  // Opus使用のため5分に延長
+  'AG-04-MERGE':      150_000,
   'AG-05':            180_000,
   'AG-06':            180_000,
   'AG-07':            150_000,
