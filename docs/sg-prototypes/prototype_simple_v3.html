@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>矢作建設工業 提案素材 — SG-COMPOSE Final</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700;900&display=swap" rel="stylesheet">
+<style>
+/* ══════════════════════════════════════
+   DESIGN SYSTEM v2 — 12px MINIMUM
+   ══════════════════════════════════════ */
+:root{
+  --pw:1123px;--ph:794px;
+
+  /* Typography — 12px minimum */
+  --t-mega:72px;--t-lg:48px;--t-md:34px;--t-sm:20px;--t-body:12px;--t-label:12px;
+  --t-stat-lg:64px;--t-stat-md:40px;--t-stat-sm:28px;
+  --lh-mega:1.02;--lh-lg:1.06;--lh-md:1.12;--lh-sm:1.2;--lh-body:1.6;
+  --fw-h:900;--fw-b:400;--fw-l:700;
+
+  /* Colors — Simple tone */
+  --bg:#F2F0EC;--wh:#FFF;--dk:#1A1A1A;--dk2:#282828;--alt:#EAEAE6;--alt2:#E0DED9;
+  --tx:#1A1A1A;--ts:#555;--td:#999;--inv:#F0EDE8;
+  --neg:#C0392B;--pos:#27764E;--info:#2C5F8A;
+  --bdr:#D4D2CD;--bl:#E8E6E1;
+  --f:'Noto Sans JP',-apple-system,sans-serif;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:var(--f);background:#555;font-size:var(--t-body);line-height:var(--lh-body);-webkit-font-smoothing:antialiased;color:var(--tx)}
+
+/* ── SLIDE SHELL ── */
+.S{width:var(--pw);height:var(--ph);margin:4px auto;overflow:hidden;display:flex;flex-direction:column;background:var(--wh);position:relative}
+.S.dk{background:var(--dk);color:var(--inv)}.S.tn{background:var(--alt)}
+
+/* ── HEADER ── */
+.H{flex-shrink:0;height:32px;padding:0 36px;display:flex;justify-content:space-between;align-items:center}
+.H .sl{font-size:var(--t-label);font-weight:var(--fw-l);letter-spacing:.14em;text-transform:uppercase;color:var(--td)}
+.H .sl b{color:var(--tx)}
+.dk .H .sl{color:rgba(255,255,255,.3)}.dk .H .sl b{color:rgba(255,255,255,.5)}
+.H .tag{font-size:var(--t-label);font-weight:var(--fw-l);letter-spacing:.1em;text-transform:uppercase;color:var(--td);border:1px solid var(--bdr);padding:2px 8px}
+.dk .H .tag{border-color:rgba(255,255,255,.12);color:rgba(255,255,255,.25)}
+
+/* ── FOOTER ── */
+.F{flex-shrink:0;height:32px;padding:0 36px;display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--bl);font-size:var(--t-body);color:var(--td)}
+.F .nx{color:var(--tx);font-weight:var(--fw-h);text-align:right;max-width:400px}
+.dk .F{border-color:rgba(255,255,255,.06);color:rgba(255,255,255,.2)}.dk .F .nx{color:rgba(255,255,255,.45)}
+
+/* ── CONTENT ── */
+.C{flex:1;min-height:0;overflow:hidden;display:flex;flex-direction:column}
+
+/* ── TYPOGRAPHY ── */
+.tm{font-size:var(--t-mega);font-weight:var(--fw-h);line-height:var(--lh-mega);letter-spacing:-.03em;overflow:hidden;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical}
+.tm em{font-style:normal;text-decoration:underline;text-decoration-thickness:3px;text-underline-offset:6px}
+.tl{font-size:var(--t-lg);font-weight:var(--fw-h);line-height:var(--lh-lg);letter-spacing:-.02em;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.tl em{font-style:normal;text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:4px}
+.tmd{font-size:var(--t-md);font-weight:var(--fw-h);line-height:var(--lh-md)}
+.tsm{font-size:var(--t-sm);font-weight:var(--fw-h);line-height:var(--lh-sm)}
+.tb{font-size:var(--t-body);color:var(--ts);line-height:var(--lh-body);flex-shrink:1;min-height:0;overflow:hidden}
+.dk .tb{color:rgba(255,255,255,.45)}
+.tlab{font-size:var(--t-label);font-weight:var(--fw-l);letter-spacing:.14em;text-transform:uppercase;color:var(--td)}
+.dk .tlab{color:rgba(255,255,255,.2)}
+
+/* ── STAT ── */
+.st-lg{font-size:var(--t-stat-lg);font-weight:var(--fw-h);line-height:1;letter-spacing:-.03em}
+.st-md{font-size:var(--t-stat-md);font-weight:var(--fw-h);line-height:1;letter-spacing:-.03em}
+.st-sm{font-size:var(--t-stat-sm);font-weight:var(--fw-h);line-height:1;letter-spacing:-.02em}
+.st-u{font-size:calc(var(--t-body) + 2px);font-weight:var(--fw-l);margin-left:2px}
+.st-l{font-size:var(--t-body);color:var(--td);margin-top:3px}
+.dk .st-l{color:rgba(255,255,255,.2)}
+
+/* ── COMPONENTS ── */
+
+/* callout */
+.co{background:var(--dk);color:var(--inv);padding:12px 16px}
+.co-l{font-size:var(--t-label);font-weight:var(--fw-l);letter-spacing:.1em;text-transform:uppercase;opacity:.4;margin-bottom:3px}
+.co-t{font-size:var(--t-sm);font-weight:var(--fw-h);line-height:1.25}
+
+/* evidence */
+.ev{font-size:var(--t-body);padding:5px 0;display:flex;gap:6px;border-bottom:1px solid var(--bl);color:var(--ts)}
+.ev:last-child{border:0}
+.ev b{flex-shrink:0;min-width:28px;font-weight:var(--fw-l);color:var(--tx)}
+
+/* warn / info */
+.bw{padding:8px 12px;font-size:var(--t-body);color:var(--neg);line-height:1.5;border-left:2px solid var(--neg);background:rgba(192,57,43,.04)}
+.bi{padding:8px 12px;font-size:var(--t-body);color:var(--info);line-height:1.5;border-left:2px solid var(--info);background:rgba(44,95,138,.04)}
+
+/* catch copy */
+.cc{display:flex;gap:8px;padding:8px 10px;background:var(--alt);margin-bottom:3px}
+.cc-a{font-size:var(--t-label);font-weight:var(--fw-l);letter-spacing:.06em;text-transform:uppercase;background:var(--dk);color:var(--inv);padding:2px 6px;flex-shrink:0;margin-top:1px}
+.cc-c{font-size:var(--t-sm);font-weight:var(--fw-h);line-height:1.2}
+.cc-n{font-size:var(--t-body);color:var(--td);margin-top:2px}
+
+/* chart */
+.ch{display:flex;align-items:center;justify-content:center;min-height:0;flex:1}
+.ch canvas{width:100%!important;max-height:100%}
+
+/* pos map */
+.pm{position:relative;border-left:2px solid var(--tx);border-bottom:2px solid var(--tx);flex:1;min-height:0}
+.pm .ax{position:absolute;font-size:var(--t-body);font-weight:var(--fw-l);color:var(--td)}
+.pm .ax-x{bottom:-16px;left:50%;transform:translateX(-50%)}.pm .ax-y{top:50%;left:-20px;transform:rotate(-90deg);white-space:nowrap}
+.pm .dot{position:absolute;transform:translate(-50%,50%);font-size:var(--t-body);font-weight:var(--fw-l);white-space:nowrap;padding:2px 6px}
+.pm .dc{background:var(--alt);color:var(--ts)}.pm .dt{background:var(--dk);color:var(--inv)}
+.pm .cr{position:absolute;background:var(--bl)}.pm .crh{width:100%;height:1px;top:50%}.pm .crv{width:1px;height:100%;left:50%}
+
+/* visual spec */
+.vsp{border:1.5px dashed var(--bdr);padding:12px 16px;text-align:center}
+.vsp b{font-size:var(--t-label);font-weight:var(--fw-l);letter-spacing:.08em;text-transform:uppercase;color:var(--td);display:block;margin-bottom:3px}
+.vsp span{font-size:var(--t-body);color:var(--ts)}
+
+/* ── UTILITY ── */
+/* RULE: No mt-auto. Zones use flex-start + gap. Last child gets flex:1 to fill remaining space. */
+.f{display:flex}.fc{flex-direction:column}.f1{flex:1;min-height:0;min-width:0}
+/* Zone column: top-packed, last child stretches */
+.zone{display:flex;flex-direction:column;gap:8px;justify-content:flex-start}
+.zone>:last-child{flex:1;display:flex;flex-direction:column;justify-content:flex-end}
+.ac{align-items:center}.as{align-items:stretch}.jc{justify-content:center}
+.oh{overflow:hidden}.p-s{padding:12px 16px}.p-m{padding:16px 24px}.p-l{padding:24px 36px}
+.bg-dk{background:var(--dk);color:var(--inv)}.bg-dk2{background:var(--dk2);color:var(--inv)}
+.bg-alt{background:var(--alt)}.bg-wh{background:var(--wh)}
+.br{border-right:1px solid var(--bl)}.bb{border-bottom:1px solid var(--bl)}.bt{border-top:1px solid var(--bl)}
+.dk .br{border-color:rgba(255,255,255,.06)}.dk .bb{border-color:rgba(255,255,255,.06)}.dk .bt{border-color:rgba(255,255,255,.06)}
+.c-neg{color:var(--neg)}.c-pos{color:var(--pos)}.c-info{color:var(--info)}
+.gap-2{gap:2px}.gap-4{gap:4px}.gap-6{gap:6px}.gap-8{gap:8px}
+</style>
+</head>
+<body>
+
+<!-- ═══ P01 — Template: A-01 (cover-photo-split) ═══ -->
+<div class="S dk">
+  <div class="H"><div class="sl">Web Proposal Material</div><div class="tag">矢作建設工業 — 採用サイトリニューアル</div></div>
+  <div class="C" style="flex-direction:row">
+    <div class="f1 br f fc jc p-l" style="background:var(--dk2)">
+      <div style="border:1.5px dashed rgba(255,255,255,.1);flex:1;display:flex;align-items:center;justify-content:center;margin-bottom:20px">
+        <div class="tlab" style="color:rgba(255,255,255,.12);text-align:center">施工実績<br>キービジュアル</div>
+      </div>
+      <div class="f gap-8">
+        <div><div class="st-md" style="color:var(--inv)">2,000<span class="st-u">億円+</span></div><div class="st-l">連結売上高</div></div>
+        <div><div class="st-md" style="color:var(--inv)">90<span class="st-u">年+</span></div><div class="st-l">創業</div></div>
+        <div><div class="st-md" style="color:var(--inv)">Prime</div><div class="st-l">東証プライム</div></div>
+      </div>
+    </div>
+    <div class="f1 f fc jc p-l">
+      <div class="tm" style="margin-bottom:16px">御社の採用サイトは、<br>採用したい学生ほど<br><em>3秒で閉じている</em></div>
+      <div class="tb" style="max-width:400px">東京・大阪の優秀な建築系学生が矢作建設工業を『比較対象』にすら入れていない構造的理由と、その解決設計。</div>
+    </div>
+  </div>
+  <div class="F"><span>SWORKS — 2026.04.08</span><div class="nx">この実力が、なぜ学生に伝わっていないのか →</div></div>
+</div>
+
+
+<!-- ═══ P02 — Template: A-06 (toc-columns) ═══ -->
+<div class="S">
+  <div class="H"><div class="sl"><b>00</b> ストーリー構成</div></div>
+  <div class="C" style="flex-direction:row">
+    <div class="f1 br bg-dk f fc p-s" style="justify-content:space-between">
+      <div><div style="font-size:56px;font-weight:900;line-height:1;color:rgba(255,255,255,.06)">01</div></div>
+      <div><div class="tmd" style="color:var(--inv);margin-bottom:4px">HOOK</div><div class="tsm" style="color:var(--inv)">3秒で閉じている</div></div>
+      <div class="tb" style="color:rgba(255,255,255,.25)">→ なぜ閉じられる？</div>
+    </div>
+    <div class="f1 br f fc p-s" style="justify-content:space-between">
+      <div><div style="font-size:56px;font-weight:900;line-height:1;color:rgba(0,0,0,.04)">02</div></div>
+      <div><div class="tmd" style="margin-bottom:4px">PROBLEM</div><div class="tsm">設計前提の乖離</div></div>
+      <div class="tb">→ 競合はどう解決？</div>
+    </div>
+    <div class="f1 br bg-alt f fc p-s" style="justify-content:space-between">
+      <div><div style="font-size:56px;font-weight:900;line-height:1;color:rgba(0,0,0,.04)">03</div></div>
+      <div><div class="tmd" style="margin-bottom:4px">ANALYSIS</div><div class="tsm">5軸ベンチマーク</div></div>
+      <div class="tb">→ 大手と戦って勝てる？</div>
+    </div>
+    <div class="f1 br bg-dk f fc p-s" style="justify-content:space-between">
+      <div><div style="font-size:56px;font-weight:900;line-height:1;color:rgba(255,255,255,.06)">04</div></div>
+      <div><div class="tmd" style="color:var(--inv);margin-bottom:4px">INSIGHT</div><div class="tsm" style="color:var(--inv)">空白地帯の発見</div></div>
+      <div class="tb" style="color:rgba(255,255,255,.25)">→ どうサイトで取る？</div>
+    </div>
+    <div class="f1 br f fc p-s" style="justify-content:space-between">
+      <div><div style="font-size:56px;font-weight:900;line-height:1;color:rgba(0,0,0,.04)">05</div></div>
+      <div><div class="tmd" style="margin-bottom:4px">SOLUTION</div><div class="tsm">3層設計</div></div>
+      <div class="tb">→ セグメントで機能？</div>
+    </div>
+    <div class="f1 bg-alt f fc p-s" style="justify-content:space-between">
+      <div><div style="font-size:56px;font-weight:900;line-height:1;color:rgba(0,0,0,.04)">06</div></div>
+      <div><div class="tmd" style="margin-bottom:4px">VISION</div><div class="tsm">大手か、矢作か</div></div>
+      <div class="tb">結論。</div>
+    </div>
+  </div>
+  <div class="F"><span>STORY LINE</span><div class="nx">事実の確認から始める →</div></div>
+</div>
+
+
+<!-- ═══ P03 — Template: B-01 (headline-body-evidence) + C-01 (chart-right) ═══ -->
+<div class="S">
+  <div class="H"><div class="sl"><b>01</b> 課題提起 — 定量根拠</div><div class="tag">全体の前提</div></div>
+  <div class="C" style="flex-direction:row">
+    <div style="width:62%;display:flex;flex-direction:column;padding:8px 20px 8px 36px;overflow:hidden;gap:12px">
+      <div class="tl">採用したい学生ほど<em>3秒で閉じている</em></div>
+      <div class="tb">トップ企業の採用サイトは3分以上滞在を確保。中堅以下は40秒以下で離脱。矢作はプライム上場にもかかわらず「中堅以下」と同じサイト構造。</div>
+      <div class="f gap-8">
+        <div><div class="st-md c-neg">40<span class="st-u">秒</span></div><div class="st-l">矢作（推定）</div></div>
+        <div><div class="st-md">3<span class="st-u">分+</span></div><div class="st-l">スーゼネ平均</div></div>
+        <div><div class="st-md">78<span class="st-u">%</span></div><div class="st-l">信頼記号なし時の直帰率</div></div>
+      </div>
+      <div>
+        <div class="tlab" style="margin-bottom:4px">エビデンス</div>
+        <div class="ev"><b>★★★</b><span>採用サイト平均滞在：トップ3分超 vs 中堅以下40秒以下 — マイナビ就職白書 2025</span></div>
+        <div class="ev"><b>★★★</b><span>FVに信頼の記号なし → 直帰率78% — Nielsen Norman Group</span></div>
+        <div class="ev"><b>★★</b><span>建築系学生72%が施工実績ビジュアルを最重要と回答 — 建築学会 2024</span></div>
+        <div class="bw" style="margin-top:6px"><b>⚠ CAVEAT</b> 40秒はGA未取得の推定値。GA共有を依頼し実データで検証すべき。</div>
+      </div>
+    </div>
+    <div style="width:38%;background:var(--alt);display:flex;flex-direction:column;padding:20px 24px">
+      <div class="tlab" style="margin-bottom:4px">滞在時間比較</div>
+      <div class="ch"><canvas id="c1"></canvas></div>
+    </div>
+  </div>
+  <div class="F"><span>HOOK 01/02</span><div class="nx">40秒で何が起きているのか？ 離脱の構造を分解する →</div></div>
+</div>
+
+
+<!-- ═══ P04 — Template: G-01 (bands-3) ═══ -->
+<div class="S">
+  <div class="H"><div class="sl"><b>01</b> 離脱分析 — 定性根拠</div><div class="tag">根拠 → 3層設計が封じる対象</div></div>
+  <div class="C">
+    <div style="padding:4px 36px 8px;flex-shrink:0">
+      <div class="tl">離脱の<em>3つの瞬間</em></div>
+      <div class="tb">各設計欠陥→解決Layerが1:1対応。</div>
+    </div>
+    <div class="f1 f fc" style="min-height:0">
+      <!-- Band 1 -->
+      <div class="f1 f as" style="border-top:2px solid var(--dk)">
+        <div class="bg-dk f fc jc ac" style="width:90px;padding:8px"><div class="tmd" style="color:var(--inv)">0-3</div><div class="tb" style="color:rgba(255,255,255,.25)">秒</div></div>
+        <div class="f1 f ac p-m">
+          <div class="f1"><div class="tsm c-neg">「知らない会社だ」</div><div class="tb" style="margin-top:4px">施工実績なし。上場表記なし。信頼の記号ゼロ。FVは人物写真のみで企業規模が一切伝わらない。</div></div>
+          <div class="f1" style="border-left:1px solid var(--bl);padding-left:14px"><div class="tsm c-pos">競合の対応</div><div class="tb" style="margin-top:4px">大林：スカイツリーFV。鹿島：渋谷動画FV。数字＋映像の二重構造で0.5秒で信頼成立。</div></div>
+        </div>
+        <div class="bg-alt f fc jc ac" style="width:120px;padding:8px;text-align:center"><div class="tb" style="margin-bottom:2px">→ 解決</div><div class="tsm c-info">Layer 01</div><div class="tb">FV信頼刷り込み</div></div>
+      </div>
+      <!-- Band 2 -->
+      <div class="f1 f as bt">
+        <div class="bg-dk f fc jc ac" style="width:90px;padding:8px"><div class="tmd" style="color:var(--inv)">3-10</div><div class="tb" style="color:rgba(255,255,255,.25)">秒</div></div>
+        <div class="f1 f ac p-m">
+          <div class="f1"><div class="tsm c-neg">「自分に関係ない」</div><div class="tb" style="margin-top:4px">地域・職種フィルタなし。東京の学生に名古屋情報。勤務地フィルタ不在で自分ごと化できない。</div></div>
+          <div class="f1" style="border-left:1px solid var(--bl);padding-left:14px"><div class="tsm c-pos">競合の対応</div><div class="tb" style="margin-top:4px">竹中：エリア別フィルタ。清水：職種×エリア。鹿島：3軸フィルタで最短到達。</div></div>
+        </div>
+        <div class="bg-alt f fc jc ac" style="width:120px;padding:8px;text-align:center"><div class="tb" style="margin-bottom:2px">→ 解決</div><div class="tsm c-info">Layer 02</div><div class="tb">地域別導線分岐</div></div>
+      </div>
+      <!-- Band 3 -->
+      <div class="f1 f as bt">
+        <div class="bg-dk f fc jc ac" style="width:90px;padding:8px"><div class="tmd" style="color:var(--inv)">10-30</div><div class="tb" style="color:rgba(255,255,255,.25)">秒</div></div>
+        <div class="f1 f ac p-m">
+          <div class="f1"><div class="tsm c-neg">「どこにでもある会社」</div><div class="tb" style="margin-top:4px">「チャレンジ精神」等の汎用ワードのみ。他社にない独自価値が一つも訴求されていない。</div></div>
+          <div class="f1" style="border-left:1px solid var(--bl);padding-left:14px"><div class="tsm c-pos">競合の対応</div><div class="tb" style="margin-top:4px">大林：DX特設。鹿島：自由研究制度。竹中：設計思想深堀り。各社独自軸で差別化。</div></div>
+        </div>
+        <div class="bg-alt f fc jc ac" style="width:120px;padding:8px;text-align:center"><div class="tb" style="margin-bottom:2px">→ 解決</div><div class="tsm c-info">Layer 03</div><div class="tb">裁量を証拠で</div></div>
+      </div>
+    </div>
+    <div class="co" style="flex-shrink:0"><div class="co-l">示唆</div><div class="co-t">3つの離脱は「認知→自分ごと化→差別化」の連鎖。1つでも欠けると次に進まない。だから3層全てが必要。</div></div>
+  </div>
+  <div class="F"><span>HOOK 02/02</span><div class="nx">この欠陥はなぜ放置されてきたのか？ 構造的原因へ →</div></div>
+</div>
+
+
+<!-- ═══ P05 — Template: D-04 (compare-stacked) + C-07 (radar) ═══ -->
+<div class="S">
+  <div class="H"><div class="sl"><b>02</b> 課題構造 — GAP分析</div><div class="tag">根拠 → FV信頼設計＋地域別導線</div></div>
+  <div class="C" style="flex-direction:row">
+    <div style="width:45%;display:flex;flex-direction:column;padding:8px 16px 8px 36px;overflow:hidden">
+      <div class="tl" style="margin-bottom:8px">「名古屋の設計」を<em>そのまま使っている</em></div>
+      <div class="tb" style="margin-bottom:8px">現行は名古屋認知前提。東京・大阪は全く異なる前提。4軸すべて致命的乖離。</div>
+      <div class="f fc gap-2 f1" style="min-height:0">
+        <div class="f1 f as bg-alt oh"><div class="bg-dk f ac jc" style="width:80px;padding:6px"><div class="tb" style="font-weight:var(--fw-l);color:var(--inv)">認知度</div></div><div class="f1 f ac" style="padding:8px 12px"><div><div class="tb">現行：知っている前提</div><div class="tb" style="font-weight:var(--fw-h);color:var(--neg);margin-top:2px">実態：認知率 推定5%以下</div></div></div><div class="f ac jc c-neg" style="width:48px;font-weight:var(--fw-h)">致命的</div></div>
+        <div class="f1 f as bg-alt oh"><div class="bg-dk f ac jc" style="width:80px;padding:6px"><div class="tb" style="font-weight:var(--fw-l);color:var(--inv)">地域感覚</div></div><div class="f1 f ac" style="padding:8px 12px"><div><div class="tb">現行：名古屋で十分</div><div class="tb" style="font-weight:var(--fw-h);color:var(--neg);margin-top:2px">実態：「名古屋＝中小」バイアス</div></div></div><div class="f ac jc c-neg" style="width:48px;font-weight:var(--fw-h)">致命的</div></div>
+        <div class="f1 f as bg-alt oh"><div class="bg-dk f ac jc" style="width:80px;padding:6px"><div class="tb" style="font-weight:var(--fw-l);color:var(--inv)">比較行動</div></div><div class="f1 f ac" style="padding:8px 12px"><div><div class="tb">現行：単独閲覧</div><div class="tb" style="font-weight:var(--fw-h);color:var(--neg);margin-top:2px">実態：3〜5社と同時比較</div></div></div><div class="f ac jc c-neg" style="width:48px;font-weight:var(--fw-h)">高</div></div>
+        <div class="f1 f as bg-alt oh"><div class="bg-dk f ac jc" style="width:80px;padding:6px"><div class="tb" style="font-weight:var(--fw-l);color:var(--inv)">信頼形成</div></div><div class="f1 f ac" style="padding:8px 12px"><div><div class="tb">現行：社名で伝わる</div><div class="tb" style="font-weight:var(--fw-h);color:var(--neg);margin-top:2px">実態：FVで0.5秒判断</div></div></div><div class="f ac jc c-neg" style="width:48px;font-weight:var(--fw-h)">高</div></div>
+      </div>
+      <div class="co" style="margin-top:6px"><div class="co-l">示唆</div><div class="co-t">知名度ではない。設計の前提ミス。変えれば解決する。</div></div>
+    </div>
+    <div style="width:55%;background:var(--alt);display:flex;flex-direction:column;padding:20px 28px">
+      <div class="tlab" style="margin-bottom:4px">設計前提乖離レーダー</div>
+      <div class="ch" style="flex:1;background:var(--wh);border:1px solid var(--bdr);padding:8px"><canvas id="c2"></canvas></div>
+      <div class="tb" style="text-align:center;margin-top:6px;color:var(--td)">乖離面積 = 設計負債。黒（スーゼネ）と赤（矢作）の差 = 伝わっていない実力</div>
+    </div>
+  </div>
+  <div class="F"><span>PROBLEM 01/01</span><div class="nx">では、競合はどう解決しているのか？ →</div></div>
+</div>
+
+
+<!-- ═══ P06 — Template: D-01 (compare-4col) ═══ -->
+<div class="S">
+  <div class="H"><div class="sl"><b>03</b> 競合分析 — 4社比較</div><div class="tag">根拠 → 改善目標値</div></div>
+  <div class="C" style="flex-direction:row">
+    <div class="f1 br f fc">
+      <div class="bg-dk p-s" style="flex-shrink:0"><div class="tsm" style="color:var(--inv)">大林組</div></div>
+      <div class="f fc p-s f1 oh" style="justify-content:space-between">
+        <div><div class="tlab">FV信頼</div><div class="tb" style="font-weight:var(--fw-l);color:var(--pos)">スカイツリーFV。動画＋数字。0.5秒で信頼成立。</div></div>
+        <div><div class="tlab">導線</div><div class="tb" style="font-weight:var(--fw-l);color:var(--pos)">職種×事業別分岐。DX特設あり。</div></div>
+        <div><div class="tlab">差別化</div><div class="tb" style="font-weight:var(--fw-l)">「テクノロジーで社会を変える」</div></div>
+        <div><div class="tlab">コンテンツ深度</div><div class="tb" style="font-weight:var(--fw-l);color:var(--pos)">DX特設、技術ブログ、プロジェクトストーリー。</div></div>
+        <div><div class="tlab">若手裁量</div><div class="tb" style="font-weight:var(--fw-l);color:var(--neg)">なし（組織規模で訴求）</div></div>
+      </div>
+    </div>
+    <div class="f1 br f fc">
+      <div class="bg-dk p-s" style="flex-shrink:0"><div class="tsm" style="color:var(--inv)">鹿島建設</div></div>
+      <div class="f fc p-s f1 oh" style="justify-content:space-between">
+        <div><div class="tlab">FV信頼</div><div class="tb" style="font-weight:var(--fw-l);color:var(--pos)">渋谷スクランブル動画FV。規模が直感的。</div></div>
+        <div><div class="tlab">導線</div><div class="tb" style="font-weight:var(--fw-l);color:var(--pos)">3軸フィルタ（エリア・職種・テーマ）。</div></div>
+        <div><div class="tlab">差別化</div><div class="tb" style="font-weight:var(--fw-l)">「100年をつくる会社」</div></div>
+        <div><div class="tlab">コンテンツ深度</div><div class="tb" style="font-weight:var(--fw-l);color:var(--pos)">自由研究制度、技術系キャリアパス。</div></div>
+        <div><div class="tlab">若手裁量</div><div class="tb" style="font-weight:var(--fw-l);color:var(--neg)">なし（技術力で訴求）</div></div>
+      </div>
+    </div>
+    <div class="f1 br f fc">
+      <div class="bg-dk p-s" style="flex-shrink:0"><div class="tsm" style="color:var(--inv)">清水建設</div></div>
+      <div class="f fc p-s f1 oh" style="justify-content:space-between">
+        <div><div class="tlab">FV信頼</div><div class="tb" style="font-weight:var(--fw-l);color:var(--pos)">ランドマーク＋創業200年超。二重信頼。</div></div>
+        <div><div class="tlab">導線</div><div class="tb" style="font-weight:var(--fw-l);color:var(--pos)">職種×エリアマトリクス。</div></div>
+        <div><div class="tlab">差別化</div><div class="tb" style="font-weight:var(--fw-l)">「子どもたちに誇れるしごとを。」</div></div>
+        <div><div class="tlab">コンテンツ深度</div><div class="tb" style="font-weight:var(--fw-l)">社員インタビュー中心。技術系は薄め。</div></div>
+        <div><div class="tlab">若手裁量</div><div class="tb" style="font-weight:var(--fw-l);color:var(--neg)">なし（歴史で訴求）</div></div>
+      </div>
+    </div>
+    <div class="f1 f fc" style="background:rgba(192,57,43,.04)">
+      <div style="background:var(--neg);padding:12px 16px;flex-shrink:0"><div class="tsm" style="color:var(--inv)">矢作（現行）</div></div>
+      <div class="f fc p-s f1 oh" style="justify-content:space-between">
+        <div><div class="tlab">FV信頼</div><div class="tb" style="font-weight:var(--fw-l);color:var(--neg)">人物写真中心。施工実績なし。上場表記なし。信頼の記号ゼロ。</div></div>
+        <div><div class="tlab">導線</div><div class="tb" style="font-weight:var(--fw-l);color:var(--neg)">単一導線。フィルタなし。全員に同じ情報。</div></div>
+        <div><div class="tlab">差別化</div><div class="tb" style="font-weight:var(--fw-l);color:var(--neg)">汎用ワードのみ。差別化ゼロ。</div></div>
+        <div><div class="tlab">コンテンツ深度</div><div class="tb" style="font-weight:var(--fw-l);color:var(--neg)">社員インタビューのみ。独自コンテンツなし。</div></div>
+        <div><div class="tlab">若手裁量</div><div class="tb" style="font-weight:var(--fw-l);color:var(--neg)">なし（名古屋は口コミ伝達）</div></div>
+      </div>
+    </div>
+  </div>
+  <div class="F"><span>ANALYSIS 01/02</span><div class="nx">この差を数値化する →</div></div>
+</div>
+
+
+<!-- ═══ P07 — Template: C-07 (radar-compare) + D-07 (gap-ranking) ═══ -->
+<div class="S tn">
+  <div class="H"><div class="sl"><b>03</b> ベンチマーク — 5軸定量評価</div><div class="tag">根拠 → 投資優先順位</div></div>
+  <div class="C" style="flex-direction:row">
+    <div style="width:42%;display:flex;flex-direction:column;padding:12px 16px 12px 28px">
+      <div class="tl" style="margin-bottom:10px">5軸<em>スコア比較</em></div>
+      <div style="background:var(--wh);border:1px solid var(--bdr);flex:1;display:flex;padding:10px"><div class="ch"><canvas id="c4"></canvas></div></div>
+    </div>
+    <div style="width:58%;display:flex;flex-direction:column;padding:12px 28px 12px 16px">
+      <div class="f gap-8" style="margin-bottom:10px">
+        <div><div class="st-md c-neg">3.2<span class="st-u">/10</span></div><div class="st-l">矢作 総合</div></div>
+        <div><div class="st-md">8.4<span class="st-u">/10</span></div><div class="st-l">スーゼネ平均</div></div>
+      </div>
+      <div class="tlab" style="margin-bottom:4px">改善優先順位（Gap大→小）</div>
+      <div class="f fc gap-2 f1" style="min-height:0">
+        <div class="f1 f ac bg-wh" style="padding:8px 12px"><div style="width:48px" class="st-sm c-neg">-7.5</div><div class="f1"><div class="tb" style="font-weight:var(--fw-h);color:var(--tx)">FV信頼形成</div><div class="tb">矢作2.0 vs 平均9.5 → 施工実績＋信頼数字</div></div><div class="tb c-neg" style="font-weight:var(--fw-l)">最優先</div></div>
+        <div class="f1 f ac bg-wh" style="padding:8px 12px"><div style="width:48px" class="st-sm c-neg">-7.0</div><div class="f1"><div class="tb" style="font-weight:var(--fw-h);color:var(--tx)">導線設計</div><div class="tb">矢作2.0 vs 平均9.0 → 地域別3分岐</div></div><div class="tb c-neg" style="font-weight:var(--fw-l)">優先</div></div>
+        <div class="f1 f ac bg-wh" style="padding:8px 12px"><div style="width:48px" class="st-sm c-neg">-6.5</div><div class="f1"><div class="tb" style="font-weight:var(--fw-h);color:var(--tx)">差別化MSG</div><div class="tb">矢作1.5 vs 平均8.0 → 「若手裁量」独自軸</div></div><div class="tb c-neg" style="font-weight:var(--fw-l)">優先</div></div>
+        <div class="f1 f ac" style="padding:8px 12px"><div style="width:48px" class="st-sm" style="color:var(--td)">-3.5</div><div class="f1"><div class="tb" style="font-weight:var(--fw-h);color:var(--tx)">コンテンツ深度</div><div class="tb">矢作3.0 vs 平均6.5</div></div><div class="tb" style="color:var(--td);font-weight:var(--fw-l)">中</div></div>
+        <div class="f1 f ac" style="padding:8px 12px"><div style="width:48px" class="st-sm" style="color:var(--td)">-2.5</div><div class="f1"><div class="tb" style="font-weight:var(--fw-h);color:var(--tx)">モバイル最適化</div><div class="tb">矢作5.0 vs 平均7.5 — 相対的に健全</div></div><div class="tb c-pos" style="font-weight:var(--fw-l)">低</div></div>
+      </div>
+      <div class="co" style="margin-top:6px"><div class="co-l">示唆</div><div class="co-t">FV・導線・差別化の3軸に集中投資すれば 3.2 → 8.0圏に到達可能。</div></div>
+    </div>
+  </div>
+  <div class="F"><span>ANALYSIS 02/02</span><div class="nx">しかし——大手の土俵で戦って勝てるのか？ →</div></div>
+</div>
+
+
+<!-- ═══ P08 — Template: B-04 (quote-with-evidence) ★PEAK★ ═══ -->
+<div class="S dk">
+  <div class="H"><div class="sl"><b>04</b> インサイト</div><div class="tag">コンセプトの核心 — ストーリーのピーク</div></div>
+  <div class="C f fc jc" style="padding:0 36px">
+    <div class="tm" style="margin-bottom:16px">勝てる土俵は<br><em>空いている</em></div>
+    <div class="tb" style="max-width:500px">大手が作った『規模・技術・スケール』の軸に乗り続ける限り、矢作は永遠に劣位。しかし競合全社が手をつけていない空白がある——『若手が現場を動かせる裁量』という土俵だ。</div>
+  </div>
+  <div class="f" style="border-top:1px solid rgba(255,255,255,.06);flex-shrink:0">
+    <div class="f1 br" style="padding:18px 24px">
+      <div class="tlab" style="margin-bottom:4px">定量根拠 01</div>
+      <div class="st-lg" style="color:var(--inv)">100<span class="st-u">%</span></div>
+      <div class="tb" style="margin-top:6px;color:rgba(255,255,255,.35)">「若手裁量」コンテンツを持つスーゼネ = 0社。空白率100%。</div>
+    </div>
+    <div class="f1 br" style="padding:18px 24px">
+      <div class="tlab" style="margin-bottom:4px">定量根拠 02</div>
+      <div class="st-lg" style="color:var(--inv)">61<span class="st-u">%</span></div>
+      <div class="tb" style="margin-top:6px;color:rgba(255,255,255,.35)">学生の就活軸 #2「成長速度」。この2位の軸が全社で未訴求。</div>
+    </div>
+    <div class="f1" style="padding:18px 24px">
+      <div class="tlab" style="margin-bottom:4px">定性根拠</div>
+      <div class="tmd" style="color:var(--inv);margin-top:6px">名古屋で実証済み</div>
+      <div class="tb" style="margin-top:6px;color:rgba(255,255,255,.35)">「矢作は若手に任せてくれる」口コミで採用成立。サイトに未反映なだけ。</div>
+    </div>
+  </div>
+  <div class="F"><span>INSIGHT 01/02</span><div class="nx">この空白をどの位置で取るべきか →</div></div>
+</div>
+
+
+<!-- ═══ P09 — Template: C-08 (pos-map-split) ═══ -->
+<div class="S">
+  <div class="H"><div class="sl"><b>04</b> ポジショニング ＋ コンテンツギャップ</div><div class="tag">根拠 → 競合不在象限の占有</div></div>
+  <div class="C" style="flex-direction:row">
+    <div style="width:48%;display:flex;flex-direction:column;padding:8px 16px 8px 36px">
+      <div class="tl" style="margin-bottom:8px">競合がいない<em>象限</em>を取る</div>
+      <div class="tb" style="margin-bottom:8px">スーゼネ4社は右上（大規模×低裁量）に密集。矢作のTARGETは右下——「大手並み規模×若手裁量」。この象限に競合ゼロ。</div>
+      <div style="background:var(--wh);border:1px solid var(--bdr);flex:1;padding:8px;min-height:0"><div class="ch"><canvas id="c5"></canvas></div></div>
+      <div class="co" style="margin-top:6px"><div class="co-l">Opportunity</div><div class="co-t">「若手裁量」は全社×。矢作が最初に取れば第一想起を獲得。</div></div>
+    </div>
+    <div style="width:52%;background:var(--alt);display:flex;flex-direction:column;padding:20px 28px">
+      <div class="tlab" style="margin-bottom:4px">ポジショニングマップ</div>
+      <div class="pm" style="margin:6px 12px 16px 24px">
+        <div class="ax ax-x">若手の裁量 →</div><div class="ax ax-y">組織規模 →</div>
+        <div class="cr crh"></div><div class="cr crv"></div>
+        <div class="dot dc" style="left:82%;bottom:78%">大林</div>
+        <div class="dot dc" style="left:78%;bottom:73%">鹿島</div>
+        <div class="dot dc" style="left:74%;bottom:69%">清水</div>
+        <div class="dot dc" style="left:70%;bottom:65%">竹中</div>
+        <div class="dot dc" style="left:28%;bottom:26%">地域ゼネコン</div>
+        <div class="dot dt" style="left:72%;bottom:26%">矢作 TARGET</div>
+      </div>
+    </div>
+  </div>
+  <div class="F"><span>INSIGHT 02/02</span><div class="nx">この空白をサイト設計でどう取りにいくか？ →</div></div>
+</div>
+
+
+<!-- ═══ P10 — Template: G-03 (bands-3-dark) ═══ -->
+<div class="S dk">
+  <div class="H"><div class="sl"><b>05</b> 設計提案</div></div>
+  <div class="C">
+    <div style="padding:4px 36px 10px;flex-shrink:0"><div class="tl" style="color:var(--inv)">3層設計で<em>取りにいく</em></div></div>
+    <div class="f1 f fc" style="min-height:0">
+      <div class="f1 f as" style="border-top:1px solid rgba(255,255,255,.06)">
+        <div class="f ac jc" style="width:72px;background:rgba(255,255,255,.03)"><div class="st-sm" style="opacity:.15">01</div></div>
+        <div class="f1 f ac p-m">
+          <div class="f1"><div class="tmd" style="color:var(--inv);margin-bottom:6px">FVで3秒以内に信頼を刷り込む</div><div class="tb">施工実績＋上場ラベル＋数字で「知らない会社」→「大手だ」を3秒転換。鹿島FVの映像＋信頼指標方式をベースに。</div></div>
+        </div>
+        <div class="f fc jc ac" style="width:140px;background:rgba(255,255,255,.03);padding:10px;text-align:center"><div class="tb" style="color:rgba(255,255,255,.25)">封じる離脱</div><div class="tsm" style="color:var(--inv);margin:3px 0">FV 0-3秒</div><div class="tb" style="color:rgba(255,255,255,.25)">Gap -7.5pt</div></div>
+      </div>
+      <div class="f1 f as" style="border-top:1px solid rgba(255,255,255,.06)">
+        <div class="f ac jc" style="width:72px;background:rgba(255,255,255,.03)"><div class="st-sm" style="opacity:.15">02</div></div>
+        <div class="f1 f ac p-m">
+          <div class="f1"><div class="tmd" style="color:var(--inv);margin-bottom:6px">地域別に導線を分岐</div><div class="tb">名古屋/東京/大阪の3分岐。FV直下「あなたが働く場所は？」で分岐。各エリアのプロジェクト・社員をパーソナライズ。</div></div>
+        </div>
+        <div class="f fc jc ac" style="width:140px;background:rgba(255,255,255,.03);padding:10px;text-align:center"><div class="tb" style="color:rgba(255,255,255,.25)">封じる離脱</div><div class="tsm" style="color:var(--inv);margin:3px 0">ナビ 3-10秒</div><div class="tb" style="color:rgba(255,255,255,.25)">Gap -7.0pt</div></div>
+      </div>
+      <div class="f1 f as" style="border-top:1px solid rgba(255,255,255,.06)">
+        <div class="f ac jc" style="width:72px;background:rgba(255,255,255,.03)"><div class="st-sm" style="opacity:.15">03</div></div>
+        <div class="f1 f ac p-m">
+          <div class="f1"><div class="tmd" style="color:var(--inv);margin-bottom:6px">裁量を証拠で見せる</div><div class="tb">「3年目で現場所長」を数字＋タイムライン＋業務範囲で構造化。大手10年 vs 矢作3年のファクトを可視化。</div></div>
+        </div>
+        <div class="f fc jc ac" style="width:140px;background:rgba(255,255,255,.03);padding:10px;text-align:center"><div class="tb" style="color:rgba(255,255,255,.25)">封じる離脱</div><div class="tsm" style="color:var(--inv);margin:3px 0">コンテンツ 10-30秒</div><div class="tb" style="color:rgba(255,255,255,.25)">Gap -6.5pt</div></div>
+      </div>
+    </div>
+  </div>
+  <div class="F"><span>SOLUTION 01/02</span><div class="nx">最も重要な差別化Layer → Layer 03 →</div></div>
+</div>
+
+
+<!-- ═══ P11 — Template: B-10 (catch-options) + C-01 (chart-right) ═══ -->
+<div class="S">
+  <div class="H"><div class="sl"><b>05</b> Layer 03 — コンセプト具現化</div><div class="tag">コンテンツ 10-30秒 / 全社×</div></div>
+  <div class="C" style="flex-direction:row">
+    <div style="width:52%;display:flex;flex-direction:column;padding:8px 16px 8px 36px;overflow:hidden">
+      <div class="tl" style="margin-bottom:8px">裁量を<em>証拠で見せる</em></div>
+      <div class="tb" style="margin-bottom:10px">「3年目で現場所長」を数字＋タイムラインで構造化。大手10年 vs 矢作3年のファクトを可視化。抽象的な「やりがい」ではなく数字と業務範囲で証明。</div>
+      <div class="cc"><span class="cc-a">事実</span><div><div class="cc-c">3年目で、現場所長。</div><div class="cc-n">最もシンプルで強い。大手との差が一目瞭然。</div></div></div>
+      <div class="cc"><span class="cc-a">対比</span><div><div class="cc-c">大手で10年かかることを、3年で。</div><div class="cc-n">比較構造で裁量速度を明示。攻撃的 → 要相談。</div></div></div>
+      <div class="cc"><span class="cc-a">問い</span><div><div class="cc-c">あなたは、何年目に現場を任されたいですか。</div><div class="cc-n">学生への語りかけ。自分ごと化を促す。</div></div></div>
+      <div class="bw" style="margin-top:8px"><b>⚠ 最重要確認</b> 「3年目で現場所長」の実在を矢作に確認必須。この数値＝提案の信頼のコア。</div>
+    </div>
+    <div style="width:48%;background:var(--alt);display:flex;flex-direction:column;padding:20px 28px">
+      <div class="tlab" style="margin-bottom:4px">キャリア到達年数比較</div>
+      <div class="ch" style="flex:1"><canvas id="c7"></canvas></div>
+      <div class="bi" style="margin-top:6px"><b>📋 CD確認</b> 矢作側のキャリアパスデータをヒアリング。事実ベースの情報が必要。</div>
+    </div>
+  </div>
+  <div class="F"><span>SOLUTION 02/02</span><div class="nx">3層はセグメントごとにどう機能する？ →</div></div>
+</div>
+
+
+<!-- ═══ P12 — Template: G-02 (bands-3-detail) ═══ -->
+<div class="S">
+  <div class="H"><div class="sl"><b>06</b> ターゲティング — セグメント別設計</div><div class="tag">投資配分とCV設計</div></div>
+  <div class="C">
+    <div style="padding:4px 36px 8px;flex-shrink:0"><div class="tl">3セグメントの離脱と<em>設計対応</em></div></div>
+    <div class="f1 f fc" style="min-height:0">
+      <div class="f1 f as" style="border-top:2px solid var(--dk)">
+        <div class="bg-dk f fc jc ac" style="width:100px;padding:8px"><div class="tsm" style="color:var(--inv)">東京</div><div class="tb" style="color:rgba(255,255,255,.25);margin-top:2px">最優先</div></div>
+        <div class="f1 f ac p-m">
+          <div class="f1"><div class="tsm c-neg">「矢作？知らない」</div><div class="tb" style="margin-top:4px">FVで信頼形成できず即離脱。認知率推定5%以下。スーゼネ3-5社と同時比較。</div></div>
+          <div class="f1" style="border-left:1px solid var(--bl);padding-left:14px"><div class="tsm c-pos">Layer 01で封じる</div><div class="tb" style="margin-top:4px">施工実績＋上場ラベルで3秒判定クリア。FV信頼スコア2.0→9.0。</div></div>
+        </div>
+        <div class="bg-alt f fc jc" style="width:120px;padding:10px;text-align:center"><div class="tb" style="font-weight:var(--fw-h)">CV: インターン</div><div class="tb" style="color:var(--td)">離脱率 78%→40%</div><div class="tb" style="color:var(--td)">申込 2倍</div></div>
+      </div>
+      <div class="f1 f as bt">
+        <div class="bg-dk f fc jc ac" style="width:100px;padding:8px"><div class="tsm" style="color:var(--inv)">大阪</div><div class="tb" style="color:rgba(255,255,255,.25);margin-top:2px">優先</div></div>
+        <div class="f1 f ac p-m">
+          <div class="f1"><div class="tsm c-neg">「名古屋の会社でしょ」</div><div class="tb" style="margin-top:4px">大阪拠点・案件が見えず離脱。「名古屋＝中小」バイアスが強い。</div></div>
+          <div class="f1" style="border-left:1px solid var(--bl);padding-left:14px"><div class="tsm c-pos">Layer 02で封じる</div><div class="tb" style="margin-top:4px">エリア分岐で大阪LP直行。大阪の施工実績＋オフィス＋先輩社員。</div></div>
+        </div>
+        <div class="bg-alt f fc jc" style="width:120px;padding:10px;text-align:center"><div class="tb" style="font-weight:var(--fw-h)">CV: 説明会</div><div class="tb" style="color:var(--td)">LP到達 0%→60%</div><div class="tb" style="color:var(--td)">予約 3倍</div></div>
+      </div>
+      <div class="f1 f as bt">
+        <div class="bg-dk f fc jc ac" style="width:100px;padding:8px"><div class="tsm" style="color:var(--inv)">名古屋</div><div class="tb" style="color:rgba(255,255,255,.25);margin-top:2px">維持強化</div></div>
+        <div class="f1 f ac p-m">
+          <div class="f1"><div class="tsm c-neg">「矢作は知ってる。で？」</div><div class="tb" style="margin-top:4px">差別化不足で準大手と横並び。「なぜ矢作か」に答えるコンテンツが不在。</div></div>
+          <div class="f1" style="border-left:1px solid var(--bl);padding-left:14px"><div class="tsm c-pos">Layer 03で封じる</div><div class="tb" style="margin-top:4px">「若手裁量」コンテンツを全面展開。口コミ情報をサイトで構造化。</div></div>
+        </div>
+        <div class="bg-alt f fc jc" style="width:120px;padding:10px;text-align:center"><div class="tb" style="font-weight:var(--fw-h)">CV: 面談</div><div class="tb" style="color:var(--td)">滞在時間維持</div><div class="tb" style="color:var(--td)">申込 1.5倍</div></div>
+      </div>
+    </div>
+  </div>
+  <div class="F"><span>TARGETING</span><div class="nx">結局、この提案で何が起きるのか？ →</div></div>
+</div>
+
+
+<!-- ═══ P13 — Template: A-07 (end-page / vision) ═══ -->
+<div class="S dk">
+  <div class="H"><div class="sl"><b>07</b> ビジョン</div></div>
+  <div class="C f fc jc" style="padding:0 36px">
+    <div class="tm" style="margin-bottom:16px">東京・大阪の学生が<br>「大手か、矢作か」で<br><em>迷う日を作る</em></div>
+    <div class="tmd" style="color:var(--inv);margin-bottom:8px">名古屋では、すでにそれが起きている。</div>
+    <div class="tb" style="max-width:500px">矢作の採用課題は知名度ではない。東証プライム上場・売上高2,000億円超の実力が、サイト設計の問題で伝わっていないだけだ。名古屋で実証済みの「若手裁量モデル」をサイト設計で東京・大阪に届ける——それがこの提案の全て。</div>
+  </div>
+  <div class="f" style="border-top:1px solid rgba(255,255,255,.06);flex-shrink:0">
+    <div class="f1 br" style="padding:16px 24px"><div class="st-md" style="color:var(--inv)">3<span class="st-u">層</span></div><div class="st-l">FV信頼＋導線分岐＋裁量証拠</div></div>
+    <div class="f1 br" style="padding:16px 24px"><div class="st-md" style="color:var(--inv)">3<span class="st-u">セグメント</span></div><div class="st-l">東京・大阪・名古屋</div></div>
+    <div class="f1" style="padding:16px 24px"><div class="st-md" style="color:var(--inv)">1<span class="st-u">コンセプト</span></div><div class="st-l">若手裁量モデル</div></div>
+  </div>
+  <div class="F"><span>VISION</span><div class="nx">END.</div></div>
+</div>
+
+
+<!-- ═══ CHARTS ═══ -->
+<script>
+const C={dk:'#1A1A1A',mid:'#999',lt:'#D4D2CD',red:'#C0392B',grn:'#27764E'};
+Chart.defaults.font.family="'Noto Sans JP',sans-serif";Chart.defaults.font.size=12;Chart.defaults.color=C.mid;
+const nL={legend:{display:false}},sL={legend:{position:'bottom',labels:{font:{size:12},boxWidth:10,padding:8}}};
+const radarScale={r:{min:0,max:10,ticks:{stepSize:2,display:false},grid:{color:C.lt},pointLabels:{font:{size:12},padding:8}}};
+
+new Chart(document.getElementById('c1'),{type:'bar',data:{labels:['大林','鹿島','清水','竹中','矢作'],datasets:[{data:[195,180,170,165,40],backgroundColor:[C.dk,C.dk,C.dk,C.dk,C.red],barThickness:18}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{...nL,title:{display:true,text:'採用サイト平均滞在時間（秒）',font:{weight:'700',size:12},color:C.dk}},scales:{x:{grid:{color:C.lt},ticks:{callback:v=>v+'秒',font:{size:12}}},y:{grid:{display:false},ticks:{font:{size:12}}}}}});
+
+new Chart(document.getElementById('c2'),{type:'radar',data:{labels:['認知度対応','地域最適化','比較耐性','信頼形成','差別化'],datasets:[{label:'スーゼネ平均',data:[9,8,9,9,7],borderColor:C.dk,backgroundColor:'rgba(26,26,26,.05)',borderWidth:1.5,pointRadius:3},{label:'矢作',data:[2,1,2,2,1],borderColor:C.red,backgroundColor:'rgba(192,57,43,.05)',borderWidth:1.5,pointRadius:3}]},options:{responsive:true,maintainAspectRatio:false,plugins:sL,scales:radarScale}});
+
+new Chart(document.getElementById('c4'),{type:'radar',data:{labels:['FV信頼','導線設計','差別化','コンテンツ','モバイル'],datasets:[{label:'大林',data:[9.5,8.5,8,9,8.5],borderColor:C.dk,backgroundColor:'transparent',borderWidth:1.5,pointRadius:2},{label:'鹿島',data:[9,9,7.5,8.5,8],borderColor:'#777',backgroundColor:'transparent',borderWidth:1,pointRadius:1},{label:'矢作',data:[2,2,1.5,3,5],borderColor:C.red,backgroundColor:'rgba(192,57,43,.06)',borderWidth:2,pointRadius:3}]},options:{responsive:true,maintainAspectRatio:false,plugins:sL,scales:radarScale}});
+
+new Chart(document.getElementById('c5'),{type:'bar',data:{labels:['施工実績','DX技術','グローバル','若手裁量','現場リアル'],datasets:[{label:'スーゼネ',data:[100,80,85,0,25],backgroundColor:C.dk,barThickness:14},{label:'矢作',data:[0,0,0,0,0],backgroundColor:C.red,barThickness:14}]},options:{responsive:true,maintainAspectRatio:false,plugins:{...sL,title:{display:true,text:'コンテンツカバー率（%）',font:{weight:'700',size:12},color:C.dk}},scales:{x:{grid:{display:false},ticks:{font:{size:12}}},y:{max:100,grid:{color:C.lt},ticks:{callback:v=>v+'%',font:{size:12}}}}}});
+
+new Chart(document.getElementById('c7'),{type:'bar',data:{labels:['現場所長','数億円規模','独立判断'],datasets:[{label:'スーゼネ',data:[10,8,7],backgroundColor:C.dk,barThickness:20},{label:'矢作',data:[3,2,2],backgroundColor:C.grn,barThickness:20}]},options:{responsive:true,maintainAspectRatio:false,plugins:{...sL,title:{display:true,text:'到達年数（少ない=早い）',font:{weight:'700',size:12},color:C.dk}},scales:{x:{grid:{display:false},ticks:{font:{size:12}}},y:{grid:{color:C.lt},ticks:{callback:v=>v+'年',font:{size:12}}}}}});
+</script>
+</body>
+</html>
