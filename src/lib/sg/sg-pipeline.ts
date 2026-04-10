@@ -1,23 +1,29 @@
 import { PrismaClient } from '@prisma/client'
 import { callClaude } from '@/lib/anthropic-client'
 import { loadPrompt } from '@/lib/prompt-loader'
-import { Sg01Output, Sg02Output, Sg04Output, Sg06Output, Slide, ToneType, ProposalVariant, NarrativeType, VARIANT_DEFAULT_NARRATIVE, FOCUS_CHAPTER_MULTIPLIER } from './types'
+import {
+  Sg00Output, Sg01Output, Sg02Output, Sg04Output, Sg06Output,
+  SgComposeOutput, Slide, ToneType, ProposalVariant, NarrativeType,
+  ConceptDirection, VARIANT_DEFAULT_NARRATIVE, FOCUS_CHAPTER_MULTIPLIER,
+} from './types'
 import { renderSlides } from './slide-renderer'
-import { generatePdf } from './pdf-generator'
+import { runSg00Direction } from '@/agents/sg-00-direction'
+import { runSgCompose } from '@/agents/sg-compose'
 
 const prisma = new PrismaClient()
 
 export interface SgPipelineInput {
   versionId: string
-  name?: string                   // 提案書名
-  variant: ProposalVariant        // full | strategy | analysis | content | spot
-  narrativeType?: NarrativeType   // insight | data | vision | solution（未指定時は自動選択）
-  targetScope?: string            // スポット型の対象
+  name?: string
+  variant: ProposalVariant
+  narrativeType?: NarrativeType
+  targetScope?: string
   tone: ToneType
-  orientation: 'landscape' | 'portrait'
+  orientation: 'landscape'     // portraitは廃止。横固定。
   slideCount: number
   audience: 'executive' | 'manager' | 'creative'
-  focusChapters?: string[]        // 重点章ID（+60%ページ配分）
+  focusChapters?: string[]
+  selectedDirection?: ConceptDirection  // SG-00で選ばれた方向性
 }
 
 async function updateStep(sgId: string, step: string) {
@@ -116,13 +122,14 @@ async function runSg01(
 - 想定スライド数: ${input.slideCount}枚
 - 聴衆: ${input.audience}
 - トーン: ${input.tone}
-- 向き: ${input.orientation}
+- 向き: landscape（A4横固定）
 - 種別（variant）: ${input.variant}
 ${input.narrativeType
     ? `- 提案書の型（指定）: ${effectiveNarrative}`
     : `- 提案書の型（推奨）: ${effectiveNarrative}（AGの内容に応じて最適な型を選択してください）`}
 ${input.targetScope ? `- スポット対象: ${input.targetScope}` : ''}
 ${focusNote}
+${input.selectedDirection ? `- コンセプト方向性: ${input.selectedDirection.concept}（${input.selectedDirection.angle}）` : ''}
 
 ## AG分析データ
 ${agContext || '（分析データなし）'}
@@ -132,7 +139,6 @@ JSONのみを返してください。`
   const raw = await callClaude(systemPrompt, userMessage, { modelType: 'quality', maxTokens: 4096 })
   const result = parseJson<Sg01Output>(raw, 'SG-01')
 
-  // 重点章のページ数を+60%調整
   if (input.focusChapters && input.focusChapters.length > 0) {
     for (const ch of result.chapters) {
       if (input.focusChapters.includes(ch.id) || input.focusChapters.includes(ch.title)) {
@@ -167,7 +173,6 @@ ${agContext || '（分析データなし）'}
 
 JSONのみを返してください。`
 
-  // SG-02はOpus（最重要）
   const raw = await callClaude(systemPrompt, userMessage, { modelType: 'premium', maxTokens: 8192 })
   return parseJson<Sg02Output>(raw, 'SG-02')
 }
@@ -176,6 +181,7 @@ async function runSg04Chapter(
   agOutputs: Record<string, unknown>,
   sg01Output: Sg01Output,
   sg02Output: Sg02Output,
+  sg_compose_pages: SgComposeOutput['pages'] | undefined,
   chapter: Sg01Output['chapters'][number],
   startSlideNumber: number,
   input: SgPipelineInput,
@@ -183,6 +189,14 @@ async function runSg04Chapter(
   const systemPrompt = loadPrompt('sg-04-content')
   const chapterCopy = sg02Output.chapterCopies.find(c => c.chapterId === chapter.id)
   const agContext = formatAgOutputs(agOutputs, chapter.agSources)
+
+  // SG-COMPOSEの構成情報をコンテキストに追加
+  const composeContext = sg_compose_pages
+    ? sg_compose_pages
+        .filter(p => p.pageNumber >= startSlideNumber && p.pageNumber < startSlideNumber + chapter.pageCount)
+        .map(p => `ページ${p.pageNumber}: テンプレート=${p.compositionTemplate}, グリッド=${p.gridType}, 背景=${p.background}`)
+        .join('\n')
+    : ''
 
   const userMessage = `## この章の情報
 章ID: ${chapter.id}
@@ -209,7 +223,7 @@ ${chapterCopy ? `見出し: ${chapterCopy.headline}
 - 聴衆: ${input.audience}
 - トーン: ${input.tone}
 
-## AGデータ（この章の参照ソース）
+${composeContext ? `## SG-COMPOSEページ構成\n${composeContext}\n\n` : ''}## AGデータ（この章の参照ソース）
 ${agContext || '（AGデータなし）'}
 
 JSONのみを返してください。`
@@ -221,7 +235,6 @@ JSONのみを返してください。`
     const result = parseJson<Sg04Output>(raw, `SG-04:${chapter.id}`)
     slides = Array.isArray(result?.slides) ? result.slides : []
   } catch {
-    // 途中でトークン切れた場合、slidesの途中まで抽出を試みる
     const match = raw.match(/"slides"\s*:\s*(\[[\s\S]*)/)
     if (match) {
       try {
@@ -244,7 +257,6 @@ async function runSg06(
   agOutputs: Record<string, unknown>,
   slides: Slide[],
 ): Promise<Sg06Output> {
-  // ビジュアルが必要なスライドのみ抽出
   const visualSlides = slides.filter(s =>
     s.visual?.type === 'chart' || s.visual?.type === 'table' || s.visual?.type === 'wireframe'
   )
@@ -281,7 +293,6 @@ JSONのみを返してください。`
   const raw = await callClaude(systemPrompt, userMessage, { modelType: 'quality', maxTokens: 8192 })
   try {
     const parsed = parseJson<Sg06Output>(raw, 'SG-06')
-    // enhancementsが配列でない場合の防御
     if (!Array.isArray(parsed?.enhancements)) {
       console.warn('[SG-06] enhancements is not array, skipping visual enhancement')
       return { enhancements: [] }
@@ -327,7 +338,7 @@ export async function createSgGeneration(input: SgPipelineInput): Promise<string
       targetScope: input.targetScope,
       focusChapters: input.focusChapters ? JSON.stringify(input.focusChapters) : null,
       tone: input.tone,
-      orientation: input.orientation,
+      orientation: 'landscape',
       slideCount: input.slideCount,
       audience: input.audience,
       status: 'RUNNING',
@@ -337,8 +348,11 @@ export async function createSgGeneration(input: SgPipelineInput): Promise<string
   return sg.id
 }
 
-// パイプライン実行（バックグラウンドで呼び出す）
-export async function executeSgPipeline(sgId: string, input: SgPipelineInput): Promise<void> {
+// ═══ Phase 1: 方向性提案（SG-00のみ） ═══
+export async function runDirectionProposal(
+  sgId: string,
+  input: SgPipelineInput,
+): Promise<Sg00Output> {
   const version = await prisma.proposalVersion.findUnique({
     where: { id: input.versionId },
     include: { project: { include: { client: true } } },
@@ -349,11 +363,64 @@ export async function executeSgPipeline(sgId: string, input: SgPipelineInput): P
   const briefText = version.project.briefText
 
   try {
+    await updateStep(sgId, 'SG-00')
     const agOutputs = await getAgOutputs(input.versionId)
+    const sg00Output = await runSg00Direction(agOutputs, clientName, briefText)
+
+    await prisma.sgGeneration.update({
+      where: { id: sgId },
+      data: {
+        directionOutput: JSON.stringify(sg00Output),
+        status: 'CHECKPOINT',
+        currentStep: 'DIRECTION_READY',
+      },
+    })
+
+    return sg00Output
+  } catch (error) {
+    await prisma.sgGeneration.update({
+      where: { id: sgId },
+      data: {
+        status: 'ERROR',
+        errorMessage: error instanceof Error ? error.message : String(error),
+        completedAt: new Date(),
+      },
+    }).catch(() => {})
+    throw error
+  }
+}
+
+// ═══ Phase 2: 提案書生成（SG-01 → SG-02 → SG-COMPOSE → SG-04 → SG-06 → HTML） ═══
+export async function runProposalGeneration(
+  sgId: string,
+  input: SgPipelineInput,
+  selectedDirection: ConceptDirection,
+): Promise<string> {
+  const version = await prisma.proposalVersion.findUnique({
+    where: { id: input.versionId },
+    include: { project: { include: { client: true } } },
+  })
+  if (!version) throw new Error(`Version ${input.versionId} not found`)
+
+  const clientName = version.project.client.name
+  const briefText = version.project.briefText
+
+  // 選択された方向性を保存
+  await prisma.sgGeneration.update({
+    where: { id: sgId },
+    data: {
+      selectedDirection: selectedDirection.id,
+      status: 'RUNNING',
+    },
+  })
+
+  try {
+    const agOutputs = await getAgOutputs(input.versionId)
+    const inputWithDirection = { ...input, selectedDirection }
 
     // SG-01: 構成設計
     await updateStep(sgId, 'SG-01')
-    const sg01Output = await runSg01(agOutputs, input, clientName, briefText)
+    const sg01Output = await runSg01(agOutputs, inputWithDirection, clientName, briefText)
     await prisma.sgGeneration.update({
       where: { id: sgId },
       data: { sg01Output: JSON.stringify(sg01Output) },
@@ -367,6 +434,17 @@ export async function executeSgPipeline(sgId: string, input: SgPipelineInput): P
       data: { sg02Output: JSON.stringify(sg02Output) },
     })
 
+    // SG-COMPOSE: ページ構成設計（Opus）
+    await updateStep(sgId, 'SG-COMPOSE')
+    const sgComposeOutput = await runSgCompose(
+      agOutputs, sg01Output, sg02Output, selectedDirection,
+      clientName, briefText, input.tone, input.slideCount, input.audience, input.focusChapters,
+    )
+    await prisma.sgGeneration.update({
+      where: { id: sgId },
+      data: { composeOutput: JSON.stringify(sgComposeOutput) },
+    })
+
     // SG-04: 本文生成（チャプター分割）
     await updateStep(sgId, 'SG-04')
     const allSlides: Slide[] = []
@@ -374,7 +452,7 @@ export async function executeSgPipeline(sgId: string, input: SgPipelineInput): P
 
     for (const chapter of sg01Output.chapters) {
       const chapterSlides = await runSg04Chapter(
-        agOutputs, sg01Output, sg02Output, chapter, slideCounter, input
+        agOutputs, sg01Output, sg02Output, sgComposeOutput.pages, chapter, slideCounter, inputWithDirection
       )
       allSlides.push(...chapterSlides)
       slideCounter += chapterSlides.length
@@ -393,28 +471,25 @@ export async function executeSgPipeline(sgId: string, input: SgPipelineInput): P
       data: { sg06Output: JSON.stringify(sg06Output) },
     })
 
-    // SG-06強化を適用
     const enhancedSlides = applyEnhancements(allSlides, sg06Output)
 
-    // HTMLレンダリング
+    // HTMLレンダリング（SG-COMPOSEの構成を渡す）
     await updateStep(sgId, 'RENDERING')
-    const slidesHtml = renderSlides(enhancedSlides, input.tone, input.orientation)
-
-    // PDF生成
-    await updateStep(sgId, 'PDF')
-    const pdfPath = await generatePdf(slidesHtml, sgId, input.orientation)
+    const htmlOutput = renderSlides(enhancedSlides, input.tone, sgComposeOutput)
 
     // 完了
     await prisma.sgGeneration.update({
       where: { id: sgId },
       data: {
         slidesJson: JSON.stringify(enhancedSlides),
-        pdfPath,
+        htmlOutput,
         status: 'COMPLETED',
         completedAt: new Date(),
         currentStep: null,
       },
     })
+
+    return htmlOutput
   } catch (error) {
     await prisma.sgGeneration.update({
       where: { id: sgId },
@@ -426,4 +501,22 @@ export async function executeSgPipeline(sgId: string, input: SgPipelineInput): P
     }).catch(() => {})
     throw error
   }
+}
+
+// 後方互換: 旧 executeSgPipeline を廃止して runProposalGeneration に移行
+// 既存コードからの呼び出しが残っている場合のために残す（非推奨）
+export async function executeSgPipeline(sgId: string, input: SgPipelineInput): Promise<void> {
+  console.warn('[SG] executeSgPipeline is deprecated. Use runDirectionProposal + runProposalGeneration.')
+  // デフォルト方向性でフォールスルー（方向性選択なし時のフォールバック）
+  const version = await prisma.proposalVersion.findUnique({
+    where: { id: input.versionId },
+    include: { project: { include: { client: true } } },
+  })
+  if (!version) throw new Error(`Version ${input.versionId} not found`)
+
+  const agOutputs = await getAgOutputs(input.versionId)
+  const sg00 = await runSg00Direction(agOutputs, version.project.client.name, version.project.briefText)
+  const defaultDirection = sg00.directions.find(d => d.id === sg00.recommendation) ?? sg00.directions[0]
+
+  await runProposalGeneration(sgId, { ...input, orientation: 'landscape' }, defaultDirection)
 }

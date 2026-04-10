@@ -139,9 +139,15 @@ model SgGeneration {
   sg05Output   String?                               // JSON: Sg05Output
   sg06Output   String?                               // JSON: SgFinalOutput (旧)
 
+  // SG-00 / SG-COMPOSE
+  directionOutput    String?                         // JSON: Sg00Output
+  selectedDirection  String?                         // CDが選んだ方向性ID
+  composeOutput      String?                         // JSON: SgComposeOutput
+  htmlOutput         String?                         // 生成済みHTML
+
   // 最終出力
   slidesJson   String?                               // JSON: Slide[]
-  pdfPath      String?                               // /proposals/{id}.pdf
+  pdfPath      String?                               // /proposals/{id}.pdf（後方互換、新規では未使用）
 
   // ステータス
   status       String          @default("PENDING")  // PENDING | RUNNING | COMPLETED | ERROR

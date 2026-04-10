@@ -27,17 +27,24 @@ export async function GET(
     orientation: sg.orientation,
     slideCount: sg.slideCount,
     audience: sg.audience,
+    selectedDirection: sg.selectedDirection,
     pdfPath: sg.pdfPath,
     startedAt: sg.startedAt,
     completedAt: sg.completedAt,
     createdAt: sg.createdAt,
     hasOutput: {
+      'SG-00': !!sg.directionOutput,
       'SG-01': !!sg.sg01Output,
       'SG-02': !!sg.sg02Output,
+      'SG-COMPOSE': !!sg.composeOutput,
       'SG-04': !!sg.sg04Output,
       'SG-06': !!sg.sg06Output,
       slides: !!sg.slidesJson,
+      html: !!sg.htmlOutput,
       pdf: !!sg.pdfPath,
     },
+    directionOutput: sg.status === 'CHECKPOINT' && sg.directionOutput
+      ? JSON.parse(sg.directionOutput)
+      : undefined,
   })
 }
