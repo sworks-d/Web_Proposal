@@ -9,6 +9,9 @@
 | 1 | SG-04 max_tokensエラー修正 | **緊急** | 低 |
 | 2 | AG-00 課題定義エージェント新規実装 | 高 | 中 |
 | 3 | AG-00 UI実装 | 高 | 中 |
+| 4 | DBスキーマ変更 | 高 | 低 |
+| 5 | 既存フローへの組み込み | 高 | 中 |
+| 6 | 後続AGへの引き継ぎ | 高 | 中 |
 
 ---
 
@@ -739,6 +742,310 @@ curl -X POST http://localhost:3000/api/ag-00 \
 | `improvements/14_AG00_ISSUE_DEFINITION.md` | AG-00の詳細仕様 |
 | `prompts/ag-00-issue/default.md` | AG-00のプロンプト |
 | `docs/ARCHITECTURE_DIAGRAM.md` | システム全体構成図 |
+
+---
+
+# タスク4: DBスキーマ変更
+
+## 概要
+
+AG-00の出力と、選択された課題・QA回答を保存するためのフィールドを追加。
+
+## 変更ファイル
+
+**ファイル:** `prisma/schema.prisma`
+
+`ProposalVersion`モデルに以下を追加：
+
+```prisma
+model ProposalVersion {
+  // ... 既存フィールド ...
+
+  // AG-00関連（新規追加）
+  problemsInput     String?   // JSON: 入力された問題リスト
+  ag00Output        String?   // JSON: AG-00の出力全体
+  selectedIssues    String?   // JSON: 選択された課題のID配列
+  questionAnswers   String?   // JSON: QA回答 [{ questionId, status, answer }]
+
+  // ... 既存フィールド ...
+}
+```
+
+## マイグレーション
+
+```bash
+npx prisma migrate dev --name add_ag00_fields
+```
+
+---
+
+# タスク5: 既存フローへの組み込み
+
+## 概要
+
+プロジェクト作成フローを以下のように変更：
+
+```
+現在:
+  プロジェクト作成 → ヒアリング入力 → AG実行
+
+変更後:
+  プロジェクト作成 → ヒアリング入力 → 問題入力 → AG-00 → 課題選択 → AG実行
+```
+
+## 変更ファイル
+
+### 5-1. プロジェクト詳細ページ
+
+**ファイル:** `src/app/projects/[id]/page.tsx`（または該当するページ）
+
+AG実行ボタンの前に、課題定義フローを追加：
+
+```tsx
+import { IssueDefinitionPanel } from '@/components/IssueDefinitionPanel'
+
+// 状態管理
+const [showIssuePanel, setShowIssuePanel] = useState(false)
+const [issuesReady, setIssuesReady] = useState(false)
+
+// 課題定義完了時
+async function handleIssueComplete(selectedIssues: Ag00Issue[], answers: QuestionAnswer[]) {
+  // DBに保存
+  await fetch(`/api/versions/${versionId}/issues`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ selectedIssues, questionAnswers: answers }),
+  })
+  
+  setIssuesReady(true)
+  setShowIssuePanel(false)
+}
+
+// UI
+{!issuesReady && (
+  <button onClick={() => setShowIssuePanel(true)}>
+    課題を定義する
+  </button>
+)}
+
+{showIssuePanel && (
+  <IssueDefinitionPanel
+    briefText={version.briefText}
+    clientInfo={{ companyName: project.client.name, industry: project.client.industry }}
+    onComplete={handleIssueComplete}
+    onCancel={() => setShowIssuePanel(false)}
+  />
+)}
+
+{issuesReady && (
+  <button onClick={handleStartAG}>
+    分析を開始する
+  </button>
+)}
+```
+
+### 5-2. 課題保存API
+
+**ファイル:** `src/app/api/versions/[versionId]/issues/route.ts`（新規作成）
+
+```typescript
+import { NextRequest, NextResponse } from 'next/server'
+import { prisma } from '@/lib/prisma'
+
+export async function POST(
+  req: NextRequest,
+  { params }: { params: { versionId: string } }
+) {
+  try {
+    const { selectedIssues, questionAnswers } = await req.json()
+
+    await prisma.proposalVersion.update({
+      where: { id: params.versionId },
+      data: {
+        selectedIssues: JSON.stringify(selectedIssues),
+        questionAnswers: JSON.stringify(questionAnswers),
+      },
+    })
+
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    console.error('Save issues error:', error)
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Unknown error' },
+      { status: 500 }
+    )
+  }
+}
+
+export async function GET(
+  req: NextRequest,
+  { params }: { params: { versionId: string } }
+) {
+  try {
+    const version = await prisma.proposalVersion.findUnique({
+      where: { id: params.versionId },
+      select: { selectedIssues: true, questionAnswers: true, ag00Output: true },
+    })
+
+    if (!version) {
+      return NextResponse.json({ error: 'Version not found' }, { status: 404 })
+    }
+
+    return NextResponse.json({
+      selectedIssues: version.selectedIssues ? JSON.parse(version.selectedIssues) : null,
+      questionAnswers: version.questionAnswers ? JSON.parse(version.questionAnswers) : null,
+      ag00Output: version.ag00Output ? JSON.parse(version.ag00Output) : null,
+    })
+  } catch (error) {
+    return NextResponse.json({ error: 'Failed to fetch' }, { status: 500 })
+  }
+}
+```
+
+---
+
+# タスク6: 後続AGへの引き継ぎ
+
+## 概要
+
+選択された課題とQA回答を、後続AGのプロンプトに注入する。
+
+## 変更ファイル
+
+### 6-1. BaseAgentの変更
+
+**ファイル:** `src/agents/base-agent.ts`
+
+`buildUserMessage`メソッドに課題情報を追加：
+
+```typescript
+protected buildUserMessage(input: AgentInput): string {
+  const ctx = input.projectContext
+  
+  // ... 既存のコード ...
+
+  // AG-00から引き継いだ課題情報を追加
+  if (ctx.selectedIssues && ctx.selectedIssues.length > 0) {
+    lines.push('')
+    lines.push('## 解決すべき課題')
+    lines.push('')
+    ctx.selectedIssues.forEach((issue, i) => {
+      lines.push(`${i + 1}. ${issue.title}`)
+      lines.push(`   ${issue.description}`)
+    })
+  }
+
+  // QA回答（answered と unknown のみ）
+  if (ctx.questionAnswers && ctx.questionAnswers.length > 0) {
+    const answered = ctx.questionAnswers.filter(q => q.status === 'answered' && q.answer)
+    const unknown = ctx.questionAnswers.filter(q => q.status === 'unknown')
+    
+    if (answered.length > 0 || unknown.length > 0) {
+      lines.push('')
+      lines.push('## 追加情報')
+      lines.push('')
+      
+      answered.forEach(q => {
+        lines.push(`- ${q.question}: ${q.answer}`)
+      })
+      
+      if (unknown.length > 0) {
+        lines.push('')
+        lines.push('以下は情報がないため、推測してください（出力に「※推測」とマーク）:')
+        unknown.forEach(q => {
+          lines.push(`- ${q.question}`)
+        })
+      }
+    }
+  }
+
+  // ... 既存のコード ...
+}
+```
+
+### 6-2. ProjectContextの型定義変更
+
+**ファイル:** `src/agents/types.ts`
+
+`ProjectContext`に課題情報を追加：
+
+```typescript
+export interface ProjectContext {
+  // ... 既存フィールド ...
+
+  // AG-00から引き継ぎ
+  selectedIssues?: {
+    id: string
+    title: string
+    description: string
+    agFocus: string[]
+  }[]
+  questionAnswers?: {
+    questionId: string
+    question?: string  // 表示用
+    status: 'answered' | 'unknown' | 'not_needed'
+    answer?: string
+  }[]
+}
+```
+
+### 6-3. AGパイプライン開始時の読み込み
+
+**ファイル:** `src/app/api/versions/[versionId]/pipeline/route.ts`（または該当するAPI）
+
+AGパイプライン開始時に課題情報を読み込んでcontextに追加：
+
+```typescript
+// DBから課題情報を取得
+const version = await prisma.proposalVersion.findUnique({
+  where: { id: versionId },
+  include: { project: { include: { client: true } } },
+})
+
+// ProjectContextに課題情報を追加
+const projectContext: ProjectContext = {
+  // ... 既存のフィールド ...
+  
+  selectedIssues: version.selectedIssues 
+    ? JSON.parse(version.selectedIssues) 
+    : undefined,
+  questionAnswers: version.questionAnswers 
+    ? JSON.parse(version.questionAnswers) 
+    : undefined,
+}
+```
+
+---
+
+# 実装チェックリスト
+
+```
+□ タスク1: SG-04 max_tokens修正
+  □ src/agents/sg-04.ts の maxTokens を 8192 に変更
+
+□ タスク2: AG-00 バックエンド
+  □ src/agents/types.ts に型定義追加
+  □ src/agents/ag-00-issue.ts 作成
+  □ src/app/api/ag-00/route.ts 作成
+  □ src/lib/prompt-loader.ts 確認/作成
+
+□ タスク3: AG-00 UI
+  □ src/components/IssueDefinitionPanel.tsx 作成
+  □ スタイル追加
+
+□ タスク4: DBスキーマ
+  □ prisma/schema.prisma 変更
+  □ npx prisma migrate dev 実行
+
+□ タスク5: フロー組み込み
+  □ プロジェクト詳細ページ変更
+  □ src/app/api/versions/[versionId]/issues/route.ts 作成
+
+□ タスク6: 後続AG引き継ぎ
+  □ src/agents/types.ts の ProjectContext 変更
+  □ src/agents/base-agent.ts の buildUserMessage 変更
+  □ AGパイプライン開始時の読み込み追加
+```
 
 ---
 
